@@ -27,6 +27,16 @@ class UTLC_Router {
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'dequeue_theme_styles' ), 9999 );
 		add_action( 'wp_print_styles', array( __CLASS__, 'dequeue_theme_styles' ), 9999 );
 		add_filter( 'show_admin_bar', array( __CLASS__, 'show_admin_bar' ) );
+		add_action( 'wp_login_failed', array( __CLASS__, 'login_failed' ) );
+	}
+
+	/** Send failed logins from our /login/ page back to it (wp_login_form posts to wp-login.php). */
+	public static function login_failed() {
+		$ref = wp_get_referer();
+		if ( $ref && false !== strpos( $ref, home_url( '/login/' ) ) ) {
+			wp_safe_redirect( add_query_arg( 'login', 'failed', remove_query_arg( 'login', $ref ) ) );
+			exit;
+		}
 	}
 
 	/* ---------------- Rewrites ---------------- */
@@ -241,6 +251,9 @@ class UTLC_Router {
 				break;
 		}
 		if ( '' !== $v['route'] ) {
+			// Board icons are emoji: keep them as native text instead of wp-emoji <img> replacements.
+			remove_action( 'wp_head', 'print_emoji_detection_script', 7 );
+			remove_action( 'wp_print_styles', 'print_emoji_styles' );
 			self::flash();
 			if ( in_array( $v['route'], array( 'submit', 'login', 'join', 'order' ), true ) ) {
 				nocache_headers();

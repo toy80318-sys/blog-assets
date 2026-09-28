@@ -11,7 +11,12 @@ $me          = wp_get_current_user();
 		<span></span><span></span><span></span>
 	</button>
 	<a class="utlc-topbar__logo" href="<?php echo esc_url( $home ); ?>">
-		<span class="utlc-topbar__mark">U</span>
+		<?php $utlc_logo = function_exists( 'utlc_logo_url' ) ? utlc_logo_url() : ''; ?>
+		<?php if ( $utlc_logo ) : ?>
+			<img class="utlc-topbar__mark utlc-topbar__mark--img" src="<?php echo esc_url( $utlc_logo ); ?>" alt="" width="32" height="32">
+		<?php else : ?>
+			<span class="utlc-topbar__mark">U</span>
+		<?php endif; ?>
 		<span class="utlc-topbar__name"><?php echo esc_html( UTLC_Router::opt( 'community_name', '커뮤니티' ) ); ?></span>
 	</a>
 	<form class="utlc-topbar__search" method="get" action="<?php echo esc_url( $search_base ); ?>" role="search">

@@ -11,7 +11,8 @@ $is_member = $uid ? UTLC_Core::is_member( $uid, $board->term_id ) : false;
 $can_post  = $uid ? UTLC_Core::can_post( $uid, $board ) : true;
 ?>
 <div class="utlc-board-header" style="--utlc-board-color: <?php echo esc_attr( $color ? $color : '#ff4500' ); ?>">
-	<div class="utlc-board-header__banner"></div>
+	<?php $banner = function_exists( 'utlc_board_banner_url' ) ? utlc_board_banner_url( $board ) : ''; ?>
+	<div class="utlc-board-header__banner"<?php echo $banner ? ' style="background-image:url(\'' . esc_url( $banner ) . '\');background-size:cover;background-position:center"' : ''; ?>></div>
 	<div class="utlc-board-header__row">
 		<span class="utlc-board-header__icon"><?php echo esc_html( $icon ? $icon : '#' ); ?></span>
 		<div class="utlc-board-header__titles">

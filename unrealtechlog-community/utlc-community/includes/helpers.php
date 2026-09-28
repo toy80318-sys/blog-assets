@@ -242,3 +242,44 @@ function utlc_client_ip() {
 	$ip = filter_var( $ip, FILTER_VALIDATE_IP ) ? $ip : '0.0.0.0';
 	return $ip;
 }
+
+/**
+ * URL of a bundled image in assets/img/ (tries jpg, png, webp, svg), or '' if missing.
+ */
+function utlc_asset_img( $name ) {
+	$name = preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $name ) );
+	foreach ( array( 'jpg', 'png', 'webp', 'svg' ) as $ext ) {
+		if ( '' !== $name && file_exists( UTLC_DIR . 'assets/img/' . $name . '.' . $ext ) ) {
+			return UTLC_URL . 'assets/img/' . $name . '.' . $ext;
+		}
+	}
+	return '';
+}
+
+/**
+ * Logo image URL: WordPress site icon first, then the bundled icon/logo.
+ */
+function utlc_logo_url() {
+	$url = function_exists( 'get_site_icon_url' ) ? get_site_icon_url( 96 ) : '';
+	if ( ! $url ) {
+		$url = utlc_asset_img( 'icon' );
+	}
+	if ( ! $url ) {
+		$url = utlc_asset_img( 'logo' );
+	}
+	return $url;
+}
+
+/**
+ * Banner image URL for a board: term meta utlc_banner, else bundled board-{slug} image.
+ */
+function utlc_board_banner_url( $term ) {
+	if ( ! $term || empty( $term->term_id ) ) {
+		return '';
+	}
+	$url = (string) get_term_meta( $term->term_id, 'utlc_banner', true );
+	if ( $url ) {
+		return esc_url_raw( $url );
+	}
+	return utlc_asset_img( 'board-' . $term->slug );
+}
