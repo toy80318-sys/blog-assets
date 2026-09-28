@@ -105,13 +105,12 @@ $yt         = ( '' !== $link && class_exists( 'UTLC_Content' ) && method_exists(
 			</div>
 		</article>
 
-		<section class="utlc-card utlc-comments-wrap" id="comments">
-			<?php
-			if ( class_exists( 'UTLC_Comments' ) && method_exists( 'UTLC_Comments', 'render' ) ) {
-				echo UTLC_Comments::render( $post ); // phpcs:ignore -- escaped by C
-			}
-			?>
-		</section>
+		<?php
+		// UTLC_Comments::render() outputs its own <section id="comments" class="utlc-comments utlc-card">.
+		if ( class_exists( 'UTLC_Comments' ) && method_exists( 'UTLC_Comments', 'render' ) ) {
+			echo UTLC_Comments::render( $post ); // phpcs:ignore -- escaped by UTLC_Comments
+		}
+		?>
 	</div>
 	<aside class="utlc-sidebar">
 		<?php UTLC_Router::render( 'parts/sidebar-board', array( 'board' => $board ) ); ?>

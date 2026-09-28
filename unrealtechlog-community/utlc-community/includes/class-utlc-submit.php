@@ -563,12 +563,12 @@ class UTLC_Submit {
 			wp_send_json_error( array( 'message' => '삭제 권한이 없습니다.' ), 403 );
 		}
 		if ( 'model' === get_post_meta( $post_id, '_utlc_kind', true ) && self::has_paid_orders( $post_id ) ) {
-			wp_update_post(
-				array(
-					'ID'          => $post_id,
-					'post_status' => 'draft',
-				)
-			);
+			$had_kses = false !== has_filter( 'content_save_pre', 'wp_filter_post_kses' );
+			kses_remove_filters();
+			wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ) );
+			if ( $had_kses ) {
+				kses_init_filters();
+			}
 			$msg = '판매 내역이 있어 비공개(초안)로 전환했습니다.';
 		} else {
 			wp_trash_post( $post_id );
