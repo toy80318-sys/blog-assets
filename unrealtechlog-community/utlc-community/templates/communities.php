@@ -22,6 +22,10 @@ $uid    = get_current_user_id();
 					}
 					?>
 					<div class="utlc-card utlc-board-card" style="--utlc-board-color: <?php echo esc_attr( $color ? $color : '#ff4500' ); ?>">
+						<?php $bb = function_exists( 'utlc_board_banner_url' ) ? utlc_board_banner_url( $b ) : ''; ?>
+						<?php if ( $bb ) : ?>
+							<img class="utlc-board-card__banner" src="<?php echo esc_url( $bb ); ?>" alt="" loading="lazy">
+						<?php endif; ?>
 						<div class="utlc-board-card__top">
 							<span class="utlc-board-header__icon utlc-board-card__icon"><?php echo esc_html( $icon ? $icon : '#' ); ?></span>
 							<div>

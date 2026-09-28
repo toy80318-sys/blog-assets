@@ -4,6 +4,10 @@ $boards = ( class_exists( 'UTLC_Core' ) && method_exists( 'UTLC_Core', 'boards' 
 $name   = UTLC_Router::opt( 'community_name', '커뮤니티' );
 ?>
 <div class="utlc-card utlc-side-card">
+	<?php $hero = function_exists( 'utlc_asset_img' ) ? utlc_asset_img( 'hero' ) : ''; ?>
+	<?php if ( $hero ) : ?>
+		<img class="utlc-side-card__hero" src="<?php echo esc_url( $hero ); ?>" alt="" loading="lazy">
+	<?php endif; ?>
 	<div class="utlc-side-card__head">🏠 홈</div>
 	<div class="utlc-side-card__body">
 		<h3 class="utlc-side-card__title"><?php echo esc_html( $name ); ?></h3>
