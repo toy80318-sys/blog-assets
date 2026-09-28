@@ -405,3 +405,14 @@ body.utlc-body { margin: 0; background: var(--utlc-bg); color: var(--utlc-text);
 /* Hide theme leftovers on our pages */
 body.utlc-body > header:not(.utlc-topbar), body.utlc-body #masthead, body.utlc-body #colophon { display: none; }
 .utlc-app .utlc-topbar__mark--img { object-fit: cover; padding: 0; background: none; border-radius: 50%; }
+
+/* Submit page: the template already shows the page heading; flatten the nested form card. */
+.utlc-app .utlc-card--pad > .utlc-submit { border: 0; box-shadow: none; padding: 0; background: transparent; }
+.utlc-app .utlc-card--pad > .utlc-submit > .utlc-submit__title { display: none; }
+.utlc-app .utlc-submit-form { display: flex; flex-direction: column; gap: 14px; }
+
+/* Narrow screens: hide the inline search box (search stays available from the home feed). */
+@media (max-width: 600px) {
+	.utlc-app .utlc-topbar__search { display: none; }
+	.utlc-app .utlc-topbar__actions { margin-left: auto; }
+}
