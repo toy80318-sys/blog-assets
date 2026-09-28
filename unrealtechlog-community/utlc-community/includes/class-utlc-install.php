@@ -36,7 +36,32 @@ class UTLC_Install {
 		self::backfill_legacy();
 
 		update_option( 'utlc_db_version', UTLC_DB_VERSION );
+		update_option( 'utlc_just_activated', 1, false );
 		flush_rewrite_rules();
+		self::purge_page_caches();
+	}
+
+	/**
+	 * Empty full-page caches so visitors see the community front page right away
+	 * instead of the cached blog home (WP Super Cache serves cached HTML without running PHP).
+	 */
+	public static function purge_page_caches() {
+		if ( function_exists( 'wp_cache_clear_cache' ) ) {
+			wp_cache_clear_cache();
+		}
+		if ( function_exists( 'w3tc_flush_all' ) ) {
+			w3tc_flush_all();
+		}
+		if ( function_exists( 'rocket_clean_domain' ) ) {
+			rocket_clean_domain();
+		}
+		if ( isset( $GLOBALS['wp_fastest_cache'] ) && method_exists( $GLOBALS['wp_fastest_cache'], 'deleteCache' ) ) {
+			$GLOBALS['wp_fastest_cache']->deleteCache( true );
+		}
+		do_action( 'litespeed_purge_all' );
+		if ( function_exists( 'wp_cache_flush' ) ) {
+			wp_cache_flush();
+		}
 	}
 
 	public static function maybe_upgrade() {

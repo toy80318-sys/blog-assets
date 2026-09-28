@@ -224,6 +224,14 @@ class UTLC_Admin {
 			$type = in_array( $n['type'], array( 'success', 'error', 'warning', 'info' ), true ) ? $n['type'] : 'info';
 			echo '<div class="notice notice-' . esc_attr( $type ) . ' is-dismissible"><p>' . esc_html( $n['msg'] ) . '</p></div>';
 		}
+		if ( current_user_can( 'manage_options' ) && get_option( 'utlc_just_activated' ) ) {
+			delete_option( 'utlc_just_activated' );
+			$home = function_exists( 'utlc_community_url' ) ? utlc_community_url() : home_url( '/' );
+			echo '<div class="notice notice-success is-dismissible"><p><strong>UTLC 커뮤니티가 켜졌습니다.</strong> '
+				. '<a href="' . esc_url( $home ) . '" target="_blank" rel="noopener">커뮤니티 홈 열기</a> · '
+				. '<a href="' . esc_url( admin_url( 'admin.php?page=utlc-community' ) ) . '">기존 데이터 점검</a>. '
+				. esc_html( '페이지 캐시를 비웠습니다. 그래도 예전 블로그 화면이 보이면 상단의 "캐시 삭제"를 한 번 누르고 새로고침하세요.' ) . '</p></div>';
+		}
 		if ( current_user_can( 'manage_options' ) && '' === (string) get_option( 'permalink_structure' ) ) {
 			echo '<div class="notice notice-error"><p><strong>UTL 커뮤니티:</strong> 고유주소(퍼머링크)가 "기본"으로 설정되어 있어 커뮤니티 주소(/r/…, /u/…)가 동작하지 않습니다. '
 				. '<a href="' . esc_url( admin_url( 'options-permalink.php' ) ) . '">고유주소 설정</a>에서 "글 이름" 등으로 변경하세요.</p></div>';
@@ -1059,6 +1067,9 @@ class UTLC_Admin {
 		update_option( 'utlc_settings', $out );
 		if ( $front_changed ) {
 			flush_rewrite_rules( false );
+			if ( class_exists( 'UTLC_Install' ) && method_exists( 'UTLC_Install', 'purge_page_caches' ) ) {
+				UTLC_Install::purge_page_caches();
+			}
 		}
 		self::notice( '설정을 저장했습니다.' );
 		wp_safe_redirect( admin_url( 'admin.php?page=utlc-settings' ) );

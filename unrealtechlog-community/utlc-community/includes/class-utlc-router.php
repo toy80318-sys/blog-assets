@@ -250,6 +250,12 @@ class UTLC_Router {
 				nocache_headers();
 				break;
 		}
+		if ( in_array( $v['route'], array( 'submit', 'login', 'join', 'order', 'download', 'pay' ), true ) || ( 'profile' === $v['route'] && in_array( $v['tab'], array( 'purchases', 'sales' ), true ) ) ) {
+			// Page caches (WP Super Cache, W3TC, LiteSpeed) must never store these per-user pages.
+			if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+				define( 'DONOTCACHEPAGE', true );
+			}
+		}
 		if ( '' !== $v['route'] ) {
 			// Board icons are emoji: keep them as native text instead of wp-emoji <img> replacements.
 			remove_action( 'wp_head', 'print_emoji_detection_script', 7 );
