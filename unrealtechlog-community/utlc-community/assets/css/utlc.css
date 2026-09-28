@@ -399,7 +399,7 @@ body.utlc-body { margin: 0; background: var(--utlc-bg); color: var(--utlc-text);
 .utlc-toast.is-hiding { opacity: 0; transform: translateY(8px); }
 
 /* ---------- Legacy blog post vote bar (outside .utlc-app) ---------- */
-.utlc-legacy-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 24px 0; padding: 12px 14px; border: 1px solid var(--utlc-border); border-radius: var(--utlc-radius); font-family: var(--utlc-font); font-size: 14px; }
+.utlc-legacy-bar, .utlc-app.utlc-legacy-bar { min-height: 0; background: var(--utlc-surface); display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 24px 0; padding: 12px 14px; border: 1px solid var(--utlc-border); border-radius: var(--utlc-radius); font-family: var(--utlc-font); font-size: 14px; }
 .utlc-legacy-bar a { color: var(--utlc-link); font-weight: 700; }
 
 /* Hide theme leftovers on our pages */
