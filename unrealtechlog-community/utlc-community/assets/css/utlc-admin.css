@@ -1,0 +1,99 @@
+/* UTL Community — admin */
+.utlc-admin .utlc-a-cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+	gap: 12px;
+	margin: 16px 0;
+}
+.utlc-admin .utlc-a-card {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 14px 16px;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-left: 4px solid #ff4500;
+	border-radius: 8px;
+	text-decoration: none;
+	color: #1d2327;
+}
+.utlc-admin .utlc-a-card:hover { border-color: #ff4500; }
+.utlc-admin .utlc-a-card__label { font-size: 12px; color: #646970; }
+.utlc-admin .utlc-a-card__value { font-size: 22px; line-height: 1.2; }
+
+.utlc-admin .utlc-a-danger {
+	margin: 16px 0;
+	padding: 12px 16px;
+	background: #fcf0f1;
+	border: 1px solid #d63638;
+	border-left: 6px solid #d63638;
+	border-radius: 6px;
+	color: #8a2424;
+}
+.utlc-admin .utlc-a-danger p { margin: 6px 0 0; }
+
+.utlc-admin .utlc-a-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+	gap: 16px;
+	align-items: start;
+}
+.utlc-admin .utlc-a-box {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 8px;
+	padding: 12px 14px 14px;
+}
+.utlc-admin .utlc-a-box h3 { margin: 4px 0 10px; font-size: 14px; }
+.utlc-admin .utlc-a-box th { font-weight: 600; }
+.utlc-admin .utlc-a-mt { margin-top: 10px; }
+
+.utlc-admin .utlc-a-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.utlc-admin .utlc-a-tools .description { flex-basis: 100%; }
+
+.utlc-a-inline { display: inline-block; margin: 0 4px 4px 0; }
+.utlc-a-actions { white-space: nowrap; }
+.utlc-a-note { width: 140px !important; }
+.utlc-a-muted { color: #8c8f94; }
+.utlc-a-ok { color: #007017; font-weight: 600; }
+.utlc-a-bad { color: #d63638; font-weight: 600; }
+.button.utlc-a-btn-danger { color: #b32d2e; border-color: #b32d2e; }
+.button.utlc-a-btn-danger:hover { background: #fcf0f1; color: #8a2424; border-color: #8a2424; }
+
+.utlc-a-table td, .utlc-a-table th { vertical-align: middle; }
+.utlc-a-map select { min-width: 200px; }
+
+.utlc-a-badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 999px;
+	font-size: 12px;
+	background: #f0f0f1;
+	color: #3c434a;
+}
+.utlc-a-badge--pending, .utlc-a-badge--requested, .utlc-a-badge--open { background: #fcf9e8; color: #8a6d00; }
+.utlc-a-badge--paid { background: #edfaef; color: #007017; }
+.utlc-a-badge--cancelled, .utlc-a-badge--dismissed { background: #f0f0f1; color: #646970; }
+.utlc-a-badge--refunded, .utlc-a-badge--failed, .utlc-a-badge--rejected, .utlc-a-badge--hidden { background: #fcf0f1; color: #b32d2e; }
+
+.utlc-a-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	font-size: 15px;
+	color: #fff;
+}
+.column-utlc_icon { width: 56px; }
+.column-utlc_order, .column-utlc_members { width: 70px; }
+
+.utlc-a-meta p { margin: 6px 0; }
+.utlc-a-meta h4 { margin: 8px 0 4px; }
+
+@media (max-width: 782px) {
+	.utlc-admin .utlc-a-grid { grid-template-columns: 1fr; }
+	.utlc-admin .utlc-a-table { display: block; overflow-x: auto; }
+	.utlc-a-actions { white-space: normal; }
+}
