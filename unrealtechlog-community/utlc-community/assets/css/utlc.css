@@ -416,3 +416,8 @@ body.utlc-body > header:not(.utlc-topbar), body.utlc-body #masthead, body.utlc-b
 	.utlc-app .utlc-topbar__search { display: none; }
 	.utlc-app .utlc-topbar__actions { margin-left: auto; }
 }
+
+/* Order page and profile market tabs: give plain cards inner spacing. */
+.utlc-app .utlc-order-page > .utlc-card,
+.utlc-app .utlc-market-tab > .utlc-card { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+.utlc-app .utlc-order-page h1, .utlc-app .utlc-order-page h2 { font-size: 20px; margin: 0; }
