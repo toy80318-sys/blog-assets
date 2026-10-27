@@ -191,7 +191,7 @@
     const SEL = {
       button: ['a.btn_comment', 'a[id^="Comi"]', '.btn_comment', '.area_comment a._cmtList', 'button.btn_comment'],
       area: ['[id^="naverComment"]', '.u_cbox'],
-      input: ['textarea.u_cbox_text', '.u_cbox_text[contenteditable="true"]', '.u_cbox_text', '.u_cbox_inbox textarea', '.u_cbox_write textarea', '.u_cbox [contenteditable="true"]'],
+      input: ['#naverComment__write_textarea', '[id$="__write_textarea"]', 'textarea.u_cbox_text', '.u_cbox_text[contenteditable="true"]', '.u_cbox_text', '.u_cbox_inbox textarea', '.u_cbox_write textarea', '.u_cbox [contenteditable="true"]'],
       guide: ['.u_cbox_guide'],
       submit: ['.u_cbox_btn_upload', 'button[data-action*="write#request"]']
     };
@@ -443,7 +443,7 @@
       setNote([r.note, pacing(r.stats)].filter(Boolean).join(' '));
       const ro = (w) => { const c = String(w).charCodeAt(String(w).length - 1); const f = c >= 0xac00 && c <= 0xd7a3 ? (c - 0xac00) % 28 : 0; return w + (f && f !== 8 ? '으로' : '로'); };
       const by = ro(r.providerLabel);
-      const where = active.login ? ' 댓글을 쓰려면 네이버에 로그인해 주세요.' : active.box ? '' : ' 댓글창을 찾지 못했어요. 글 아래 "댓글" 버튼을 눌러 주세요.';
+      const where = active.login ? ' 댓글을 쓰려면 네이버에 로그인해 주세요.' : active.box ? '' : ' 댓글창을 찾지 못했어요. 글 아래 "댓글" 버튼을 눌러 주세요(로그인이 풀렸거나 댓글을 닫아 둔 글일 수 있어요).';
       if (filled) setStatus(`${by} 만든 1번을 댓글창에 넣어 두었어요 (복사도 됨).` + where, 'ok');
       else if (copied) setStatus(`${by} 만든 1번이 복사됐어요 — 댓글창에 ${PASTE}` + where, 'ok');
       else setStatus('초안을 만들었어요. 원하는 댓글의 [복사]를 눌러 주세요.' + where);

@@ -191,6 +191,7 @@ function renderCmt() {
     $('#aiKeyUrl').href = info.keyUrl;
   }
   if (document.activeElement !== $('#cmtStyle')) $('#cmtStyle').value = c.style || '';
+  renderPerm();
   $('#cmtCallName').checked = c.callName;
   $('#cmtPrefill').checked = c.prefill;
   $('#cmtPrefetch').checked = c.prefetch;
@@ -199,7 +200,19 @@ function renderCmt() {
 document.querySelectorAll('input[name="cmtProvider"]').forEach((r) => r.addEventListener('change', () => {
   if (!r.checked) return;
   S.cmt.provider = r.value; $('#aiMsg').textContent = ''; save(); renderCmt();
+  // AI를 고르는 순간(클릭) 그 AI 주소 접근 권한을 받습니다. GPT는 오류 응답을 이 권한 없이는 읽을 수 없습니다
+  const info = NBX.AI_PROVIDERS[r.value];
+  if (info) chrome.permissions.request({ origins: [info.origin] }).catch(() => false).then(renderPerm);
 }));
+async function renderPerm() {
+  const info = NBX.AI_PROVIDERS[S.cmt.provider];
+  const el = $('#aiPerm');
+  if (!info || !el) return;
+  let ok = false;
+  try { ok = await chrome.permissions.contains({ origins: [info.origin] }); } catch (_) {}
+  el.textContent = ok ? '접근 허용됨 ✓' : '접근 허용 전 — "연결 확인"을 누르면 크롬이 한 번 묻습니다';
+  el.style.color = ok ? '#027a38' : '#b26a00';
+}
 let keyTimer;
 $('#aiKey').addEventListener('input', (e) => {
   const p = S.cmt.provider;
@@ -228,6 +241,7 @@ $('#aiTest').addEventListener('click', async () => {
   msg.style.color = '#6b7280'; msg.textContent = '확인 중…';
   await perm;
   const r = await chrome.runtime.sendMessage({ type: 'nbx-ai-test', provider: p }).catch((e) => ({ ok: false, error: String(e) }));
+  renderPerm();
   if (r && r.ok) { msg.style.color = '#027a38'; msg.textContent = `연결됐어요 ✓ (${info.label} 응답: ${String(r.sample || '').slice(0, 30)})`; }
   else { msg.style.color = '#c62828'; msg.textContent = '연결 실패: ' + ((r && r.error) || '알 수 없는 오류'); }
 });

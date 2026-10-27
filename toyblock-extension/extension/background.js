@@ -285,7 +285,7 @@ async function postJson(url, headers, body) {
     return j;
   } catch (e) {
     if (e && e.name === 'AbortError') throw new Error('응답이 너무 늦어요(20초)');
-    if (e instanceof TypeError) throw new Error('AI 서버에 연결하지 못했어요 — 설정에서 연결 확인을 눌러 주세요');
+    if (e instanceof TypeError) throw new Error('AI 서버에 연결하지 못했어요 — 키가 맞는지 확인하고, 설정의 "연결 확인"을 눌러 AI 주소 접근을 허용해 주세요');
     throw e;
   } finally { clearTimeout(timer); }
 }
@@ -480,7 +480,7 @@ function collectPosts(node, out, depth) {
   if (!node || depth > 7 || out.length >= 200) return out;
   if (Array.isArray(node)) { node.forEach((n) => collectPosts(n, out, depth + 1)); return out; }
   if (typeof node === 'object') {
-    const blogId = node.blogId || node.domainIdOrBlogId;
+    const blogId = node.blogId || node.domainIdOrBlogId || node.blogIdOrDomainId;
     if (node.logNo && typeof blogId === 'string') {
       const d = node.addDate ?? node.postDate ?? node.createdDate ?? node.regDate ?? node.addTimestamp;
       out.push({
@@ -496,19 +496,86 @@ function collectPosts(node, out, depth) {
   }
   return out;
 }
-async function buddyFeed(page) {
-  const p = Math.max(1, Math.min(20, parseInt(page, 10) || 1));
-  let r;
-  try { r = await fetch(`https://section.blog.naver.com/ajax/BuddyPostList.naver?page=${p}&groupId=0`, { credentials: 'include', cache: 'no-store' }); }
-  catch (e) { return { ok: false, error: 'network' }; }
-  if (!r.ok) return { ok: false, error: 'HTTP ' + r.status };
+// 네이버는 이웃 피드 요청에 "어느 화면에서 불렀는지(Referer)"를 확인합니다. 확장이 보내는 이 요청에만
+// 네이버 이웃 피드 화면 주소를 붙입니다(크롬의 요청 규칙 기능 — 다른 사이트·다른 요청은 건드리지 않음)
+const FEED_RULES = [
+  { id: 901, priority: 1, action: { type: 'modifyHeaders', requestHeaders: [{ header: 'referer', operation: 'set', value: 'https://m.blog.naver.com/FeedList.naver' }] },
+    condition: { urlFilter: '||query.blog.naver.com/mweb/buddy-feed/', initiatorDomains: [chrome.runtime.id], resourceTypes: ['xmlhttprequest'] } },
+  { id: 902, priority: 1, action: { type: 'modifyHeaders', requestHeaders: [{ header: 'referer', operation: 'set', value: 'https://section.blog.naver.com/BlogHome.naver?directoryNo=0&currentPage=1&groupId=0' }] },
+    condition: { urlFilter: '||section.blog.naver.com/ajax/', initiatorDomains: [chrome.runtime.id], resourceTypes: ['xmlhttprequest'] } }
+];
+let rulesP = null;
+function ensureFeedRules() {
+  if (!rulesP) rulesP = chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: FEED_RULES.map((r) => r.id), addRules: FEED_RULES }).catch((e) => { rulesP = null; throw e; });
+  return rulesP;
+}
+
+const unescapeHtml = (s) => stripTags(String(s == null ? '' : s));
+const feedItem = (c) => ({
+  blogId: c.blogIdOrDomainId || c.domainIdOrBlogId || c.blogId, logNo: String(c.logNo),
+  title: unescapeHtml(c.title).slice(0, 150), nick: unescapeHtml(c.nickname || c.nickName).slice(0, 30),
+  blogName: unescapeHtml(c.blogName).slice(0, 60), at: typeof c.addDate === 'number' ? c.addDate : (Date.parse(c.addDate) || null),
+  commentOff: c.commentOn === false
+});
+const validItem = (x) => ID_RE.test(x.blogId || '') && NO_RE.test(x.logNo || '');
+
+// ① 모바일 이웃 피드(카드) — 다음 쪽은 서버가 준 pagingParam으로 이어 받습니다
+let feedCursor = null;
+async function feedCards(more) {
+  if (!more) feedCursor = { pagingParam: null, exposed: [] };
+  if (!feedCursor || (more && !feedCursor.pagingParam)) return { ok: false, error: 'end' };
+  const body = { feedType: 'TOTAL', exposedContentKeys: feedCursor.exposed.slice(-60) };
+  if (feedCursor.pagingParam) body.pagingParam = feedCursor.pagingParam;
+  const r = await fetch('https://query.blog.naver.com/mweb/buddy-feed/ab/cards', {
+    method: 'POST', credentials: 'include', cache: 'no-store',
+    headers: { 'content-type': 'application/json', accept: 'application/json, text/plain, */*' }, body: JSON.stringify(body)
+  });
+  const text = await r.text();
+  let j;
+  try { j = JSON.parse(text.replace(/^\)\]\}',?\s*/, '')); } catch (_) { return { ok: false, error: /login|nidlogin|로그인/i.test(text) ? 'login' : 'cards:HTTP ' + r.status }; }
+  if (!j || !j.isSuccess || !j.result) return { ok: false, error: 'cards:' + ((j && j.error && (j.error.code || j.error.message)) || 'HTTP ' + r.status) };
+  const items = [];
+  for (const c of j.result.cardList || []) {
+    if (!c || c.cardType !== 'buddy_post' || !c.card || !c.card.logNo) continue; // 추천·광고 카드는 빼고 이웃 글만
+    feedCursor.exposed.push({ type: 'POST', key: Number(c.card.logNo) });
+    const it = feedItem(c.card);
+    if (validItem(it)) items.push(it);
+  }
+  feedCursor.pagingParam = j.result.pagingParam || null;
+  return { ok: true, items, more: !!feedCursor.pagingParam };
+}
+// ② 이웃새글 화면이 쓰는 목록(예전 방식)
+async function feedSection(page) {
+  const r = await fetch(`https://section.blog.naver.com/ajax/BuddyPostList.naver?page=${page}&groupId=0`, { credentials: 'include', cache: 'no-store' });
+  if (!r.ok) return { ok: false, error: 'section:HTTP ' + r.status };
   const text = (await r.text()).replace(/^\)\]\}',?\s*/, '');
   let j;
-  try { j = JSON.parse(text); } catch (_) { return { ok: false, error: /login|nidlogin|로그인/i.test(text) ? 'login' : 'not-json' }; }
-  const seen = new Set();
-  const items = collectPosts(j, [], 0).filter((x) => ID_RE.test(x.blogId) && NO_RE.test(x.logNo) && !seen.has(x.blogId.toLowerCase() + '/' + x.logNo) && seen.add(x.blogId.toLowerCase() + '/' + x.logNo));
-  if (!items.length) return { ok: false, error: 'empty', page: p };
-  return { ok: true, items, page: p };
+  try { j = JSON.parse(text); } catch (_) { return { ok: false, error: /login|nidlogin|로그인/i.test(text) ? 'login' : 'section:not-json' }; }
+  const items = collectPosts(j, [], 0).filter(validItem);
+  return items.length ? { ok: true, items, more: items.length >= 5 } : { ok: false, error: 'section:empty' };
+}
+let feedSource = null; // 한 번 성공한 방식을 다음 쪽에도 씁니다
+const feedTrace = [];
+async function buddyFeed(page) {
+  const p = Math.max(1, Math.min(20, parseInt(page, 10) || 1));
+  try { await ensureFeedRules(); } catch (e) { feedTrace.push('rules: ' + (e && e.message)); }
+  const tries = p > 1 && feedSource ? [feedSource] : ['cards', 'section'];
+  const errors = [];
+  for (const src of tries) {
+    try {
+      const r = src === 'cards' ? await feedCards(p > 1) : await feedSection(p);
+      if (r.ok) {
+        feedSource = src;
+        const seen = new Set();
+        const items = r.items.filter((x) => { const k = x.blogId.toLowerCase() + '/' + x.logNo; if (seen.has(k)) return false; seen.add(k); return true; });
+        return { ok: true, items, page: p, more: r.more, source: src };
+      }
+      errors.push(r.error);
+      if (r.error === 'end') return { ok: false, error: 'empty', page: p };
+    } catch (e) { errors.push(src + ':' + String((e && e.message) || e)); }
+  }
+  feedTrace.splice(0, feedTrace.length, ...errors.slice(-6));
+  return { ok: false, error: errors.includes('login') ? 'login' : 'fail', detail: errors.join(' | '), page: p };
 }
 
 // 키워드 노출 글: 네이버 블로그 검색 결과의 글 목록(제목·블로거)을 순서대로

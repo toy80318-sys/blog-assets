@@ -575,9 +575,9 @@
       const seen = new Set(more ? B.items.map(keyOf) : []);
       const add = r.items.filter((x) => !seen.has(keyOf(x)));
       B.items = more ? B.items.concat(add) : add;
-      B.page = page; B.more = r.items.length >= 5;
+      B.page = page; B.more = r.more !== false && r.items.length > 0;
     } else if (more && r && r.error === 'empty') B.more = false;
-    else B.error = r && r.error === 'login' ? 'login' : 'fail';
+    else { B.error = r && r.error === 'login' ? 'login' : 'fail'; B.detail = (r && r.detail) || (r && r.error) || 'no-response'; }
     render();
     refreshMarks();
   }
@@ -605,9 +605,9 @@
     if (!list.length) return '';
     return `<ol class="clist">${list.map((it, i) => {
       const mk = S.cmt.marks[keyOf(it)] || {};
-      const st = mk.p ? '<span class="cs done">✓ 댓글</span>' : mk.o ? '<span class="cs">열어봄</span>' : '';
+      const st = mk.p ? '<span class="cs done">✓ 댓글</span>' : it.commentOff ? '<span class="cs">댓글 닫힘</span>' : mk.o ? '<span class="cs">열어봄</span>' : '';
       const sub = [it.nick || it.blogName || it.blogId, it.at ? ago(it.at) : ''].filter(Boolean).map(esc).join(' · ');
-      return `<li class="ci ${mk.p ? 'dim' : ''}" data-act="cmtOpen" data-src="${src}" data-i="${i}" title="새 탭에서 댓글창으로 이동하고 댓글을 복사합니다">
+      return `<li class="ci ${mk.p || it.commentOff ? 'dim' : ''}" data-act="cmtOpen" data-src="${src}" data-i="${i}" title="새 탭에서 댓글창으로 이동하고 댓글을 복사합니다">
         <div class="ct">${esc(it.title || '(제목 없음)')}</div><div class="cm"><span>${sub}</span>${st}<b class="go">💬</b></div></li>`;
     }).join('')}</ol>`;
   }
@@ -625,7 +625,8 @@
         h += `<div class="empty">${B.error === 'login' ? '네이버에 로그인한 뒤 다시 시도해 주세요.' : '이웃 새 글을 불러오지 못했어요.'}
           <button class="btn ghost" data-act="cmtReload">다시 시도</button>
           <button class="btn ghost" data-act="cmtSection">네이버 이웃새글 화면 열기</button>
-          <div class="note">이웃새글 화면의 글 옆 <b>💬 댓글</b> 버튼으로도 똑같이 쓸 수 있어요.</div></div>`;
+          <div class="note">이웃새글 화면의 글 옆 <b>💬 댓글</b> 버튼으로도 똑같이 쓸 수 있어요.</div>
+          <button class="lnk" data-act="cmtDiag" title="불러오지 못한 이유를 복사해 개발자에게 보내 주세요">불러오기 진단 복사</button></div>`;
       } else if (!B.items.length) h += `<div class="empty">${B.loading ? '이웃 새 글을 불러오는 중…' : '이웃 새 글이 없어요.'}</div>`;
       else {
         h += itemList(B.items, 'buddy');
@@ -750,6 +751,10 @@
     else if (act === 'cmtSearch') { const qi = root.querySelector('.q'); if (qi) S.cmt.search.q = qi.value; runSearch(); }
     else if (act === 'cmtOpen') openItem(t.dataset.src === 'search' ? S.cmt.search.items : S.cmt.buddy.items, Number(t.dataset.i), t.dataset.src === 'search' ? 'other' : 'buddy');
     else if (act === 'cmtHere') chrome.runtime.sendMessage({ type: 'nbx-cmt-here' }).catch(() => {});
+    else if (act === 'cmtDiag') {
+      const text = JSON.stringify({ tool: 'toyblock-feed', version: chrome.runtime.getManifest().version, error: S.cmt.buddy.error, detail: S.cmt.buddy.detail }, null, 1);
+      chrome.runtime.sendMessage({ type: 'nbx-cmt-copy', text }).then((r) => flash(r && r.ok ? '진단 정보가 복사됐어요. 개발자에게 붙여 보내 주세요.' : '복사하지 못했어요.')).catch(() => {});
+    }
     else if (act === 'cmtSection') window.open('https://section.blog.naver.com/BlogHome.naver?directoryNo=0&currentPage=1&groupId=0', '_blank', 'noopener');
   });
   root.addEventListener('input', (e) => { if (e.target.classList && e.target.classList.contains('q')) S.cmt.search.q = e.target.value; });

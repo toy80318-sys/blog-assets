@@ -51,6 +51,7 @@
 |---|---|
 | storage | 단축키·글자 모양·패널 위치 설정과 블로그별 방문자 기록, 노출 확인 결과를 사용자의 크롬에 저장합니다. |
 | debugger | 엔터+소제목 단축키가 네이버 에디터에 실제 키보드와 같은 엔터 키를 넣는 데에만 씁니다. 사용자가 단축키를 누른 그 탭에만 잠깐 연결해 엔터 키 하나(Input.dispatchKeyEvent)를 보내고 바로 연결을 끊습니다. 페이지 내용을 읽거나 네트워크를 보지 않으며, 설정에서 끌 수 있습니다. |
+| declarativeNetRequestWithHostAccess | 확장이 네이버 이웃 피드를 불러올 때 그 요청에만 네이버 이웃 피드 화면 주소(Referer)를 붙입니다. 확장 자신의 요청에만 적용되며 다른 사이트·요청은 바꾸지 않습니다. |
 | offscreen | 댓글 초안을 클립보드에 복사하기 위한 보이지 않는 문서를 엽니다(CLIPBOARD 용도). |
 | clipboardWrite | 사용자가 연 글의 댓글 초안을 클립보드에 넣어, 댓글 입력칸에 붙여 넣기만 하면 되게 합니다. |
 | 선택 호스트: generativelanguage.googleapis.com, api.anthropic.com, api.openai.com | 사용자가 설정에서 AI를 고르고 "연결 확인"을 누를 때만 요청합니다. 사용자의 API 키로 댓글 초안을 만들 때 씁니다. |

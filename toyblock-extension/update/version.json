@@ -1,8 +1,8 @@
 {
   "name": "토이블록 네이버 블로그 도우미",
-  "version": "1.6.0",
-  "released_at": "2026-10-27T20:29:40Z",
-  "notes": "· 이웃 소통 댓글 도우미: 이웃 새 글·키워드 노출 글을 누르면 새 탭에서 댓글창으로 이동하고, 그 글에 맞춘 댓글이 복사돼 있어요\n· 제미나이(기본)·클로드·GPT로 글을 읽고 댓글 초안 3개를 만들어요. 키가 없으면 템플릿 150종으로 조합해요\n· 네이버 검색·이웃새글 화면의 글 옆에 💬 댓글 버튼\n· 블로그 분석 창을 끌어서 원하는 곳으로 옮길 수 있어요(작은 상태·펼친 상태 모두)\n· 블로그 점수 가이드에 '누락·주의 글 살리는 법'을 자세히 넣었어요",
+  "version": "1.6.1",
+  "released_at": "2026-10-27T21:40:07Z",
+  "notes": "· 이웃 새 글을 네이버 모바일 이웃 피드 방식으로 불러와요(안 되면 예전 방식으로 대신). 못 불러오면 '불러오기 진단 복사'로 이유를 보내 주세요\n· 실제 네이버 댓글 입력칸 모양(글자 입력 상자)에 맞췄어요\n· 네이버 검색 새 디자인에서도 키워드 노출 글 제목·블로거 이름을 정확히 읽어요\n· AI를 고르면 그 AI 주소 접근 허용을 바로 묻고, 허용 여부를 설정에 표시해요",
   "download_url": "https://github.com/toy80318-sys/blog-assets/raw/main/toyblock-extension/dist/toyblock-naver-blog-helper.zip",
   "guide_url": "https://github.com/toy80318-sys/blog-assets/blob/main/toyblock-extension/README.md#업데이트-방법"
 }
