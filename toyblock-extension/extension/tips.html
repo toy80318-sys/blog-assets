@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>블로그 점수 올리는 법 · 토이블록</title>
+<style>html,body{margin:0;background:#fff}</style>
+</head>
+<body>
+<!-- 토이블록 블로그 점수 가이드 — 아임웹 코드 위젯용 (HTML·CSS만 사용, 스크립트 없음) -->
+<section class="tb-tips" id="score">
+<style>
+.tb-tips{--g:#03a94d;--gd:#027a38;--gl:#e9f8ef;--ink:#1f2328;--sub:#5b6573;--line:#e6e9ee;--bg:#f6f8f7;
+  max-width:880px;margin:0 auto;padding:28px 18px 48px;color:var(--ink);background:#fff;
+  font-family:Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:16px;line-height:1.75;word-break:keep-all;-webkit-font-smoothing:antialiased}
+.tb-tips,.tb-tips *{box-sizing:border-box;letter-spacing:normal;text-transform:none;text-align:left}
+.tb-tips h1,.tb-tips h2,.tb-tips h3{color:var(--ink) !important;font-family:inherit}
+.tb-tips .tb-hero h1{color:#fff !important}
+.tb-tips a{text-decoration:none !important}
+.tb-tips .tb-nav a{color:var(--gd) !important}
+.tb-tips .tb-nav a:hover{color:#fff !important}
+.tb-tips th,.tb-tips td{border:0 !important;border-bottom:1px solid var(--line) !important}
+.tb-tips tr:last-child td{border-bottom:0 !important}
+.tb-tips h1,.tb-tips h2,.tb-tips h3,.tb-tips p,.tb-tips ul,.tb-tips ol{margin:0;padding:0}
+.tb-tips [id]{scroll-margin-top:96px}
+.tb-tips .tb-hero{border-radius:20px;padding:30px 26px;background:linear-gradient(135deg,#03a94d,#028a40);color:#fff}
+.tb-tips .tb-eyebrow{font-size:12px;font-weight:800;letter-spacing:.18em;opacity:.85}
+.tb-tips .tb-hero h1{font-size:30px;line-height:1.3;margin:8px 0 10px;font-weight:800;letter-spacing:-.02em}
+.tb-tips .tb-hero p{font-size:16px;color:#fff;opacity:.95;margin:0}
+.tb-tips .tb-nav{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 6px}
+.tb-tips .tb-nav a{display:inline-block;padding:7px 13px;border-radius:999px;background:var(--gl);color:var(--gd);font-size:14px;font-weight:700;text-decoration:none}
+.tb-tips .tb-nav a:hover{background:var(--g);color:#fff}
+.tb-tips h2{font-size:23px;line-height:1.35;margin:44px 0 12px;font-weight:800;letter-spacing:-.01em}
+.tb-tips h2 .tb-pt{display:inline-block;margin-left:8px;padding:2px 10px;border-radius:999px;background:var(--gl);color:var(--gd);font-size:14px;vertical-align:middle}
+.tb-tips h3{font-size:17px;margin:20px 0 6px;font-weight:800}
+.tb-tips p{margin:0 0 12px;color:#2b3138;text-align:left}
+.tb-tips .tb-lead{color:var(--sub);font-size:15.5px}
+.tb-tips table{width:100%;border-collapse:separate;border-spacing:0;margin:10px 0 6px;font-size:15px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.tb-tips th,.tb-tips td{padding:11px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+.tb-tips th{background:var(--bg);font-size:13.5px;color:var(--sub);font-weight:700}
+.tb-tips tr:last-child td{border-bottom:0}
+.tb-tips td b{color:var(--gd)}
+.tb-tips td:first-child,.tb-tips th:first-child{white-space:nowrap}
+.tb-tips td:nth-child(2){white-space:nowrap}
+.tb-tips .tb-grade{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
+.tb-tips .tb-grade span{padding:6px 11px;border-radius:10px;font-size:14px;font-weight:700;background:var(--bg);border:1px solid var(--line)}
+.tb-tips .tb-grade span i{font-style:normal;color:var(--sub);font-weight:500;margin-left:4px}
+.tb-tips .tb-card{border:1px solid var(--line);border-radius:16px;padding:18px 18px 8px;margin:12px 0;background:#fff}
+.tb-tips .tb-card.tb-key{background:var(--bg);border-color:#d6eadf}
+.tb-tips .tb-steps{counter-reset:s;list-style:none;margin:6px 0 12px}
+.tb-tips .tb-steps li{counter-increment:s;position:relative;padding:0 0 10px 40px}
+.tb-tips .tb-steps li::before{content:counter(s);text-align:center;position:absolute;left:0;top:1px;width:27px;height:27px;border-radius:50%;background:var(--g);color:#fff;font-size:14px;font-weight:800;display:grid;place-items:center}
+.tb-tips .tb-check{list-style:none;margin:6px 0 12px}
+.tb-tips .tb-check li{position:relative;padding:0 0 8px 28px}
+.tb-tips .tb-check li::before{content:"";position:absolute;left:2px;top:7px;width:15px;height:15px;border-radius:5px;background:var(--gl);border:2px solid var(--g)}
+.tb-tips .tb-note{font-size:14px;color:var(--sub);background:var(--bg);border-left:4px solid var(--g);border-radius:8px;padding:11px 14px;margin:8px 0 12px}
+.tb-tips .tb-faq{border-top:1px solid var(--line);padding:14px 0 4px}
+.tb-tips .tb-faq h3{margin-top:0}
+.tb-tips .tb-foot{margin-top:40px;font-size:13px;color:var(--sub);border-top:1px solid var(--line);padding-top:14px}
+.tb-tips .tb-partner{margin:40px 0 0}
+.tb-tips .tb-partner a{display:block;border-radius:16px;overflow:hidden;box-shadow:0 6px 18px rgba(180,86,11,.14);transition:transform .15s,box-shadow .15s}
+.tb-tips .tb-partner a:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(180,86,11,.2)}
+.tb-tips .tb-partner img{display:block;width:100%;height:auto;max-width:none;border:0}
+.tb-tips .tb-partner .tb-disc{font-size:12.5px;color:var(--sub);margin:8px 2px 0;line-height:1.5}
+@media (max-width:640px){.tb-tips{padding:18px 14px 36px;font-size:15.5px}.tb-tips .tb-hero{padding:24px 18px}.tb-tips .tb-hero h1{font-size:24px}.tb-tips h2{font-size:20px;margin-top:36px}.tb-tips th,.tb-tips td{padding:9px 8px;font-size:14px}}
+</style>
+
+<div class="tb-hero">
+  <div class="tb-eyebrow">TOYBLOCK · 블로그 점수 가이드</div>
+  <h1>블로그 점수를 올리는 다섯 가지 습관</h1>
+  <p>토이블록 블로그 점수는 검색 노출, 발행 꾸준함, 최근 발행, 독자 반응, 방문자를 100점으로 묶어 지금 블로그의 상태를 보여 줍니다. 점수가 낮은 항목부터 손보면 가장 빠르게 오릅니다.</p>
+</div>
+
+<nav class="tb-nav" aria-label="바로가기">
+  <a href="#score-table">점수 계산 방식</a>
+  <a href="#exposure">검색 노출</a>
+  <a href="#consistency">발행 꾸준함</a>
+  <a href="#recency">최근 발행</a>
+  <a href="#engagement">독자 반응</a>
+  <a href="#visitors">방문자</a>
+  <a href="#writing">글 구성 점검표</a>
+  <a href="#faq">자주 묻는 질문</a>
+</nav>
+
+<h2 id="score-table">점수는 이렇게 계산합니다</h2>
+<p class="tb-lead">토이블록 점수는 블로그에 공개된 정보와 네이버 블로그 검색 결과로 계산하는 자가 점검 지표입니다. 각 항목의 만점 기준을 알면 무엇을 바꿔야 할지가 분명해집니다.</p>
+<table>
+  <thead><tr><th>항목</th><th>배점</th><th>만점 기준</th></tr></thead>
+  <tbody>
+    <tr><td><b>검색 노출</b></td><td>40점</td><td>최근 글 30편을 제목으로 검색했을 때 블로그 탭 1~3위(최적)에 오르면 만점입니다. 4~10위(활성)는 80%, 11위 이하(주의)는 40%, 결과에 없으면(누락) 0점으로 셉니다.</td></tr>
+    <tr><td><b>발행 꾸준함</b></td><td>25점</td><td>최근 4주 동안 한 주 평균 3편(15점)과, 4주 모두 한 편 이상 발행(10점)을 함께 봅니다.</td></tr>
+    <tr><td><b>최근 발행</b></td><td>10점</td><td>마지막 글이 2일 안이면 10점, 7일 안 7점, 14일 안 4점, 30일 안 2점입니다.</td></tr>
+    <tr><td><b>독자 반응</b></td><td>15점</td><td>최근 글의 공감과 댓글을 더한 값이 글당 평균 5개면 만점입니다.</td></tr>
+    <tr><td><b>방문자</b></td><td>10점</td><td>최근 7일 중 가장 많았던 하루 방문자가 1,000명이면 만점입니다. 10명이면 약 3점, 100명이면 약 7점으로 완만하게 오릅니다.</td></tr>
+  </tbody>
+</table>
+<div class="tb-grade">
+  <span>최상<i>90점 이상</i></span><span>좋음<i>75~89</i></span><span>보통<i>55~74</i></span><span>관리 필요<i>35~54</i></span><span>점검 필요<i>34 이하</i></span>
+</div>
+<div class="tb-note">검색 노출 확인을 하기 전에는 나머지 네 항목으로 계산한 예상 점수가 보입니다. 패널의 "노출 확인 시작"을 누르면 40점 항목이 채워지며 점수가 확정됩니다.</div>
+
+<h2 id="exposure">검색 노출 <span class="tb-pt">40점</span></h2>
+<p>네이버는 검색 결과의 순서를 정할 때 두 가지 관점을 함께 쓴다고 공개해 왔습니다. 하나는 글을 쓴 출처가 어떤 주제를 꾸준히 깊게 다루는지 보는 <b>C-Rank</b>이고, 다른 하나는 문서 자체가 검색한 사람의 의도에 맞고 경험과 정보가 충실한지 보는 <b>D.I.A.·D.I.A.+</b>입니다. 그래서 노출이 잘 되는 블로그는 주제가 또렷하고, 글 하나하나가 검색한 사람의 질문에 바로 답합니다.</p>
+<div class="tb-card tb-key">
+  <h3>노출을 끌어올리는 글쓰기</h3>
+  <ul class="tb-check">
+    <li>카테고리마다 주제를 좁게 유지합니다. 한 카테고리 안의 글이 서로 이어지는 시리즈가 되면 주제 집중도가 높아집니다.</li>
+    <li>제목에는 사람들이 실제로 검색하는 표현을 한 번 넣고, 첫 문단에서 그 질문에 대한 답을 먼저 씁니다.</li>
+    <li>직접 해 보거나 확인한 내용, 직접 찍거나 만든 사진을 넣어 그 글만의 정보를 만듭니다.</li>
+    <li>다른 글에서 옮긴 문장이나 내 블로그의 예전 글과 거의 같은 내용은 새로 정리해 씁니다.</li>
+    <li>같은 키워드를 억지로 반복하기보다 관련 표현을 자연스럽게 섞어 문장을 이어 갑니다.</li>
+  </ul>
+</div>
+<h3>누락·주의로 나온 글 점검 순서</h3>
+<ol class="tb-steps">
+  <li>글 설정에서 <b>검색 허용</b>이 켜져 있는지 확인합니다. 토이블록은 검색 비허용 글을 따로 표시합니다.</li>
+  <li>제목과 첫 문단이 같은 주제를 말하는지 봅니다. 제목의 핵심어가 본문에 거의 없으면 포스트 분석의 "제목 키워드 본문 반복"에서 회색으로 보입니다.</li>
+  <li>최근 비슷한 제목·내용의 글을 여러 편 올렸다면, 글마다 다루는 질문을 나눠 겹침을 줄입니다.</li>
+  <li>하루 이틀 뒤 다시 노출 확인을 합니다. 검색 결과는 시간에 따라 바뀌므로 한 번의 결과보다 흐름을 봅니다.</li>
+</ol>
+
+<h2 id="consistency">발행 꾸준함 <span class="tb-pt">25점</span></h2>
+<p>C-Rank가 보는 주제 집중도는 한 번의 좋은 글보다 일정한 리듬으로 쌓인 글에서 드러납니다. 한 주 3편, 4주 연속이 만점 기준인 이유입니다.</p>
+<ul class="tb-check">
+  <li>발행 요일과 시간을 정해 둡니다. 토이블록 패널의 "4주간 발행 분석"에서 지금 가장 많이 올리는 요일과 시간대를 확인할 수 있습니다.</li>
+  <li>여유 있는 날 두세 편을 써 두고 예약 발행으로 나눠 올리면 바쁜 주에도 리듬이 유지됩니다.</li>
+  <li>한 주제를 3~5편짜리 시리즈로 기획하면 다음 글 주제를 고민하는 시간이 줄어듭니다.</li>
+</ul>
+
+<h2 id="recency">최근 발행 <span class="tb-pt">10점</span></h2>
+<p>블로그가 지금도 살아 움직인다는 신호는 가장 최근 글의 날짜에서 나옵니다. 2일 안에 새 글이 있으면 만점입니다.</p>
+<ul class="tb-check">
+  <li>긴 공백이 생길 것 같으면 짧더라도 정보가 분명한 글을 미리 예약해 둡니다.</li>
+  <li>계절·행사처럼 시기가 정해진 주제는 2~3주 앞서 발행해 검색이 늘어나는 시점에 맞춥니다.</li>
+</ul>
+
+<h2 id="engagement">독자 반응 <span class="tb-pt">15점</span></h2>
+<p>C-Rank는 글이 만들어 내는 반응, 곧 읽고 공감하고 댓글을 남기고 다시 찾아오는 흐름도 함께 봅니다. 반응은 독자가 말을 걸 수 있는 글에서 쌓입니다.</p>
+<ul class="tb-check">
+  <li>글 끝에 독자의 경험을 묻는 질문을 하나 둡니다. 예: "여러분은 어떤 방법으로 정리하고 계신가요?"</li>
+  <li>달린 댓글에는 하루 안에 답글을 남깁니다. 대화가 이어지는 글은 다시 찾는 사람이 늘어납니다.</li>
+  <li>같은 주제를 다루는 이웃 블로그를 찾아가 읽고 의견을 남기면 내 블로그를 찾는 발걸음도 생깁니다.</li>
+</ul>
+
+<h2 id="visitors">방문자 <span class="tb-pt">10점</span></h2>
+<p>방문자는 앞의 네 항목이 쌓인 결과로 따라오는 지표입니다. 검색으로 들어온 사람이 다음 글까지 읽고 가도록 길을 열어 두면 늘어납니다.</p>
+<ul class="tb-check">
+  <li>검색하는 사람이 많은 큰 주제 안에서, 질문이 구체적인 세부 주제를 골라 씁니다. 세부 주제일수록 상위에 오르기 쉽습니다.</li>
+  <li>글 안에 관련 글 2~3편을 링크로 이어 시리즈를 따라 읽게 합니다.</li>
+  <li>대표 사진과 제목만 보고도 무엇을 얻을 수 있는지 알 수 있게 만듭니다.</li>
+</ul>
+
+<h2 id="writing">글 구성 점검표</h2>
+<p>토이블록 패널의 <b>포스트 분석</b> 탭은 지금 보고 있는 글의 글자 수, 문단, 이미지, 소제목, 인용구, 키워드를 바로 보여 줍니다. 발행 전에 아래 기준과 맞춰 보면 글 한 편의 완성도가 올라갑니다.</p>
+<table>
+  <thead><tr><th>점검 항목</th><th>권장 기준</th></tr></thead>
+  <tbody>
+    <tr><td>글자 수</td><td>공백 제외 1,500자 이상. 분량보다 질문에 대한 답이 빠짐없이 들어갔는지가 먼저입니다.</td></tr>
+    <tr><td>소제목</td><td>3~4개. 소제목만 읽어도 글의 흐름이 보이게 씁니다.</td></tr>
+    <tr><td>이미지</td><td>직접 찍거나 만든 이미지 3장 이상. 각 이미지가 서로 다른 정보를 맡게 합니다.</td></tr>
+    <tr><td>제목 키워드</td><td>본문에 자연스럽게 3~5번. 포스트 분석에서 회색 키워드는 본문에 한 번도 없는 단어입니다.</td></tr>
+    <tr><td>문단</td><td>2~4문장씩 끊어 모바일에서도 읽기 편하게 만듭니다.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="faq">자주 묻는 질문</h2>
+<div class="tb-faq">
+  <h3>토이블록 점수는 네이버가 매기는 점수와 같은가요?</h3>
+  <p>토이블록 점수는 공개된 블로그 정보와 검색 결과로 계산한 자가 점검 지표입니다. 네이버 내부 평가 방식은 비공개이므로, 이 점수는 어느 항목을 먼저 손볼지 정하는 기준으로 쓰면 가장 쓸모가 있습니다.</p>
+</div>
+<div class="tb-faq">
+  <h3>노출 확인은 얼마나 자주 하면 좋나요?</h3>
+  <p>하루 한 번이면 충분합니다. 토이블록은 확인 결과를 12시간 동안 저장해 두고 다시 쓰며, 검색 사이에 간격을 두고 한 편씩 확인합니다.</p>
+</div>
+<div class="tb-faq">
+  <h3>점수가 갑자기 내려갔어요.</h3>
+  <p>패널의 항목별 막대에서 줄어든 항목을 먼저 확인합니다. 최근 발행이 비었거나, 새 글 몇 편이 누락으로 나온 경우가 대부분입니다. 누락 글은 위의 점검 순서대로 하나씩 살펴보면 원인을 좁힐 수 있습니다.</p>
+</div>
+<div class="tb-faq">
+  <h3>방문자 추이 그래프가 비어 있어요.</h3>
+  <p>방문자 수는 패널을 연 날마다 기록되어 추이가 채워집니다. 일주일 정도 꾸준히 열어 두면 7일 그래프가 완성됩니다.</p>
+</div>
+
+<div class="tb-partner">
+  <a href="https://link.coupang.com/a/iciJJKMF2a" target="_blank" rel="noopener sponsored nofollow" title="쿠팡에서 보기">
+    <picture>
+      <source media="(max-width:640px)" srcset="https://lixkizqprsbnsnozwbpa.supabase.co/storage/v1/object/public/assets/toyblock/coupang-banner-mobile.jpg">
+      <img src="https://lixkizqprsbnsnozwbpa.supabase.co/storage/v1/object/public/assets/toyblock/coupang-banner-desktop.jpg" alt="블로그 작업 장비, 쿠팡에서 둘러보기 — 쿠팡에서 보기" width="800" height="160" loading="lazy">
+    </picture>
+  </a>
+  <p class="tb-disc">이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
+</div>
+
+<p class="tb-foot">토이블록 네이버 블로그 도우미 · 점수 기준은 확장 프로그램 업데이트에 따라 다듬어질 수 있습니다. 네이버 검색의 원리는 네이버 서치어드바이저 가이드(searchadvisor.naver.com/guide)에서 더 자세히 볼 수 있습니다.</p>
+</section>
+
+
+
+
+</body>
+</html>

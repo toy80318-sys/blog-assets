@@ -1,0 +1,131 @@
+# 토이블록 네이버 블로그 도우미 — 자동 배포
+# toyblock-extension/ 안의 확장 코드·안내서·변경 메모가 바뀌어 main에 올라오면:
+#   1) 사용자용 zip과 최신 버전 정보(version.json)를 새로 만들어 커밋합니다
+#      → 설치된 확장(폴더로 불러온 경우)이 6시간 안에 새 버전 알림을 띄웁니다
+#   2) manifest.json의 버전이 올라갔고 웹스토어 정보가 등록돼 있으면 크롬 웹스토어에 올려 심사를 요청합니다
+#      → 웹스토어에서 설치한 사용자는 심사 통과 뒤 크롬이 자동으로 업데이트합니다
+#
+# 웹스토어 정보(Settings → Secrets and variables → Actions → New repository secret)
+#   CWS_PUBLISHER_ID, CWS_EXTENSION_ID  (필수)
+#   인증은 둘 중 하나:
+#     CWS_CLIENT_ID, CWS_CLIENT_SECRET, CWS_REFRESH_TOKEN   (OAuth)
+#     CWS_SERVICE_ACCOUNT_JSON                              (서비스 계정 키 JSON)
+name: toyblock-extension
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'toyblock-extension/extension/**'
+      - 'toyblock-extension/guide/**'
+      - 'toyblock-extension/update/notes.txt'
+      - 'toyblock-extension/scripts/**'
+      - '.github/workflows/toyblock-extension.yml'
+  workflow_dispatch:
+    inputs:
+      publish_store:
+        description: '크롬 웹스토어에 지금 버전을 올리기 (웹스토어 정보가 등록돼 있을 때)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: toyblock-extension
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      HAS_SA: ${{ secrets.CWS_SERVICE_ACCOUNT_JSON != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: 패키지 만들기
+        id: build
+        run: python3 toyblock-extension/scripts/build.py
+
+      - name: 웹스토어용 zip 보관 (첫 등록 때 내려받아 직접 올리기)
+        uses: actions/upload-artifact@v4
+        with:
+          name: toyblock-extension-store-v${{ steps.build.outputs.version }}
+          path: ${{ steps.build.outputs.store_zip }}
+          retention-days: 30
+
+      - name: zip과 version.json 커밋
+        run: |
+          git config user.name "toyblock-bot"
+          git config user.email "toyblock-bot@users.noreply.github.com"
+          git add toyblock-extension/dist toyblock-extension/update/version.json
+          if git diff --cached --quiet; then
+            echo "바뀐 패키지 없음"
+          else
+            git commit -m "toyblock: v${{ steps.build.outputs.version }} 패키지 자동 생성 [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: 버전이 올라갔는지 확인
+        id: bump
+        run: |
+          prev=$(git show HEAD~1:toyblock-extension/extension/manifest.json 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin)['version'])" 2>/dev/null || echo "")
+          now="${{ steps.build.outputs.version }}"
+          echo "이전: ${prev:-없음} / 지금: $now"
+          if [ "$prev" != "$now" ]; then echo "changed=true" >> "$GITHUB_OUTPUT"; else echo "changed=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: 서비스 계정 인증 (등록된 경우)
+        id: gauth
+        if: (steps.bump.outputs.changed == 'true' || inputs.publish_store) && env.HAS_SA == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.CWS_SERVICE_ACCOUNT_JSON }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+
+      - name: 크롬 웹스토어에 올리기
+        if: steps.bump.outputs.changed == 'true' || inputs.publish_store
+        env:
+          PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+          EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+          SA_TOKEN: ${{ steps.gauth.outputs.access_token }}
+          ZIP: ${{ steps.build.outputs.store_zip }}
+        run: |
+          if [ -z "$PUBLISHER_ID" ] || [ -z "$EXTENSION_ID" ]; then
+            echo "::notice::웹스토어 정보(CWS_PUBLISHER_ID, CWS_EXTENSION_ID)가 아직 없어 웹스토어 업로드는 건너뜁니다. 업데이트 알림용 패키지는 이미 올라갔습니다."
+            exit 0
+          fi
+          TOKEN="$SA_TOKEN"
+          if [ -z "$TOKEN" ]; then
+            if [ -z "$CLIENT_ID" ] || [ -z "$CLIENT_SECRET" ] || [ -z "$REFRESH_TOKEN" ]; then
+              echo "::error::웹스토어 인증 정보가 없습니다. CWS_CLIENT_ID·CWS_CLIENT_SECRET·CWS_REFRESH_TOKEN 또는 CWS_SERVICE_ACCOUNT_JSON을 등록하세요."
+              exit 1
+            fi
+            TOKEN=$(curl -sS https://oauth2.googleapis.com/token \
+              -d "client_id=$CLIENT_ID" -d "client_secret=$CLIENT_SECRET" \
+              -d "refresh_token=$REFRESH_TOKEN" -d "grant_type=refresh_token" | python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))")
+            [ -n "$TOKEN" ] || { echo "::error::액세스 토큰을 받지 못했습니다. 리프레시 토큰을 확인하세요."; exit 1; }
+          fi
+          BASE="https://chromewebstore.googleapis.com"
+          echo "업로드: $ZIP"
+          UP=$(curl -sS -X POST -H "Authorization: Bearer $TOKEN" -T "$ZIP" "$BASE/upload/v2/publishers/$PUBLISHER_ID/items/$EXTENSION_ID:upload")
+          echo "$UP"
+          if echo "$UP" | grep -q '"error"'; then echo "::error::업로드 실패. manifest.json 버전을 올렸는지, 웹스토어 정보가 맞는지 확인하세요."; exit 1; fi
+          # 업로드 처리가 끝날 때까지 잠시 상태를 확인합니다
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            echo "$UP" | grep -q 'IN_PROGRESS' || break
+            sleep 6
+            UP=$(curl -sS -H "Authorization: Bearer $TOKEN" "$BASE/v2/publishers/$PUBLISHER_ID/items/$EXTENSION_ID:fetchStatus")
+            echo "$UP"
+          done
+          if echo "$UP" | grep -q 'FAILED\|"error"'; then echo "::error::웹스토어가 패키지를 받지 못했습니다. 위 응답 내용을 확인하세요."; exit 1; fi
+          PUB=$(curl -sS -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{}' "$BASE/v2/publishers/$PUBLISHER_ID/items/$EXTENSION_ID:publish")
+          echo "$PUB"
+          if echo "$PUB" | grep -q '"error"'; then echo "::error::심사 요청 실패. 웹스토어 대시보드에서 첫 게시를 직접 한 번 했는지 확인하세요."; exit 1; fi
+          echo "::notice::웹스토어에 v${{ steps.build.outputs.version }} 심사를 요청했습니다. 통과하면 크롬이 자동으로 업데이트합니다."

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>토이블록 네이버 블로그 도우미 · 단축키 설정</title>
+<style>
+  :root { --g: #03a94d; --line: #e3e6ea; --sub: #6b7280; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f5f6f8; color: #1f2328; font: 14px/1.55 -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+  .wrap { max-width: 640px; margin: 28px auto; background: #fff; border-radius: 14px; padding: 28px 30px 24px; box-shadow: 0 2px 12px rgba(0,0,0,.05); }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  h2 { font-size: 17px; margin: 30px 0 4px; }
+  .desc { color: var(--sub); font-size: 13px; margin: 0 0 14px; }
+  .slot { display: grid; grid-template-columns: 180px 130px 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .keybtn { border: 0; background: #f1f3f5; border-radius: 8px; padding: 9px 6px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: #333; }
+  .keybtn small { font-weight: 400; color: var(--sub); }
+  .keybtn.rec { background: #e9f8ef; outline: 2px solid var(--g); }
+  .keybtn .unset { color: #d32f2f; font-weight: 400; }
+  select, input[type=text] { font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid #cfd4da; border-radius: 7px; background: #fff; }
+  .fdesc { color: var(--sub); font-size: 12.5px; }
+  .tip { border-left: 4px solid #1a73e8; background: #f4f8fe; padding: 12px 14px; border-radius: 6px; font-size: 13px; color: #444; margin-top: 16px; }
+  .card { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+  .card-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-weight: 600; }
+  .card-h small { color: var(--sub); font-weight: 400; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .tg { border: 1px solid var(--line); background: #fff; border-radius: 7px; width: 34px; height: 32px; cursor: pointer; font: inherit; }
+  .tg.on { background: #e9f8ef; border-color: var(--g); color: #027a38; }
+  .tg:disabled { opacity: .35; cursor: not-allowed; }
+  .clr { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: #444; }
+  .clr input[type=color] { width: 30px; height: 26px; border: 1px solid var(--line); border-radius: 5px; padding: 1px; background: #fff; }
+  .preview { margin-top: 12px; padding: 12px 14px; background: #fafbfc; border-radius: 8px; border: 1px dashed var(--line); }
+  .pv-quote { border-left: 3px solid #333; padding-left: 12px; }
+  .pv-quote1 { text-align: center; color: #333; }
+  .opt { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+  .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
+  .reset { width: 100%; border: 1px solid #d84315; color: #d84315; background: #fff; border-radius: 8px; padding: 11px; font: inherit; cursor: pointer; margin-top: 8px; }
+  .saved { color: var(--g); font-size: 12.5px; height: 18px; text-align: right; }
+  .warn { color: #b26a00; font-size: 12.5px; margin-top: 4px; }
+  .cmdbox { border: 1px solid #f3c2c2; background: #fdf0f0; border-radius: 10px; padding: 14px 16px; margin-top: 16px; }
+  .cmdh { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; margin-bottom: 8px; }
+  .cmdh b { color: #b42318; } .cmdh span { font-size: 12.5px; color: #6b7280; }
+  .cmdrow { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; border-bottom: 1px dashed #f0d4d4; }
+  .cmdrow em { font-style: normal; font-weight: 700; } .cmdrow em.unset { color: #d32f2f; font-weight: 400; }
+  .cmdbox button { margin-top: 10px; width: 100%; padding: 9px; border-radius: 8px; border: 1px solid #b42318; background: #fff; color: #b42318; font: inherit; font-weight: 700; cursor: pointer; }
+  .cmdbox p { font-size: 12px; color: #7a6060; margin: 8px 0 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div style="color:#03a94d;font-weight:700;font-size:13px;margin-bottom:2px">토이블록 네이버 블로그 도우미</div>
+  <h1>블로그 에디터 단축키</h1>
+  <p class="desc">각 단축키 옆에서 기능을 고르면 바로 저장되고, 열려 있는 에디터에도 즉시 반영됩니다. 왼쪽 회색 버튼을 누른 뒤 원하는 키 조합을 누르면 단축키가 바뀝니다(Backspace는 해제). 같은 기능을 여러 슬롯에 배정해도 됩니다.</p>
+  <div id="slots"></div>
+  <div id="dup" class="warn"></div>
+
+  <div class="opt" style="margin-top:14px">
+    <b style="font-size:13px">인용구2 모양</b>
+    <select id="q2style"></select>
+    <span class="fdesc">'인용구2' 기능이 삽입할 인용구 블록 모양</span>
+  </div>
+
+  <div class="cmdbox">
+    <div class="cmdh"><b>크롬 단축키</b><span>브라우저가 먼저 받아서 네이버 에디터에서도 확실하게 작동합니다</span></div>
+    <div id="cmds"></div>
+    <button id="openShortcuts" type="button">크롬 단축키 직접 설정 열기</button>
+    <p>크롬은 확장 하나에 단축키를 4개까지만 자동으로 지정합니다. 단축키5~8은 위 버튼으로 연 화면에서 "토이블록 네이버 블로그 도우미" 항목에 원하는 키를 눌러 지정하세요. 다른 프로그램과 겹치는 키는 크롬이 지정하지 않으니 그때는 다른 조합을 고르면 됩니다.</p>
+  </div>
+
+  <div class="tip">💡 왼쪽 회색 버튼으로 정하는 키는 페이지 안에서 받는 <b>보조 단축키</b>입니다. 크롬 단축키와 같은 키를 그대로 두면 됩니다. 같은 기능은 에디터 화면에 뜨는 <b>서식 바</b>와 텍스트를 드래그하면 뜨는 <b>미니 팝업</b>으로도 실행할 수 있습니다. 단축키는 글쓰기 화면에서 본문을 한 번 클릭해 둔 상태에서 누르세요.</div>
+
+  <h2>화면 표시</h2>
+  <label class="opt"><input type="checkbox" id="showBar"> 글쓰기 화면에 단축키 버튼 표시 (단축키가 듣지 않을 때 클릭으로 실행)</label>
+  <div class="opt" style="padding-left:22px;flex-wrap:wrap">
+    <label><input type="radio" name="barMode" value="top"> 상단 빈 곳에 고정 (로고와 저장·발행 사이)</label>
+    <label><input type="radio" name="barMode" value="float"> 떠 있는 바 (끌어서 원하는 곳으로 이동)</label>
+  </div>
+  <label class="opt"><input type="checkbox" id="showPopup"> 텍스트 선택 시 미니 팝업 표시</label>
+  <label class="opt"><input type="checkbox" id="showPanel"> 블로그 화면 왼쪽에 분석 패널 표시 (채널·포스트 분석, 검색 노출 확인)</label>
+  <div class="opt" style="flex-wrap:wrap;padding-left:22px">
+    <span style="font-size:13px">블로그 점수 팁 페이지 주소</span>
+    <input type="text" id="tipsUrl" placeholder="https://내사이트.imweb.me/blog-tips (비워 두면 확장에 들어 있는 페이지)" style="flex:1;min-width:260px">
+    <button type="button" id="tipsPreview" style="padding:6px 10px;border-radius:7px;border:1px solid #03a94d;background:#fff;color:#027a38;cursor:pointer">열어 보기</button>
+  </div>
+  <div class="opt"><span style="font-size:13px">팝업에 추가할 버튼</span>
+    <label><input type="checkbox" class="extra" value="colorRed"> 글자색(빨강)</label>
+    <label><input type="checkbox" class="extra" value="colorBlue"> 글자색(파랑)</label>
+    <label><input type="checkbox" class="extra" value="highlight"> 형광펜(노랑)</label>
+  </div>
+
+  <h2>단축키 글자 모양 편집</h2>
+  <p class="desc">소제목·인용구1·본문·볼드에 배정된 단축키를 누를 때 함께 적용할 글자 모양입니다. 고르면 바로 저장됩니다. 글자를 선택하지 않고 커서만 둔 상태면 그 문단 전체에 적용합니다. 글자색·배경색은 네이버 색상표에서 고른 색과 가장 가까운 칸으로 들어갑니다. 인용구 서식에는 네이버 에디터 제약상 취소선이 적용되지 않습니다.</p>
+  <div id="styles"></div>
+
+  <button class="reset" id="reset">단축키 설정 초기화</button>
+  <div class="saved" id="saved"></div>
+  <a id="partner" target="_blank" rel="noopener sponsored" style="display:block;margin-top:14px;padding:12px 14px;border-radius:10px;text-decoration:none;background:linear-gradient(120deg,#fff7ec,#ffeeda);border:1px solid #f6d7b0;color:#3b2a14"><b style="display:block">🛒 쿠팡에서 오늘의 추천 상품 보기 →</b><span style="font-size:12px;color:#8a6a3f">블로그 작업 장비·생활용품 둘러보기</span></a>
+  <p id="disc" style="font-size:11px;color:#9aa3ae;margin:6px 0 0"></p>
+</div>
+<script src="features.js"></script>
+<script src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,219 @@
+const IS_MAC = /Mac/i.test(navigator.platform);
+let S = NBX.merge(null);
+let recording = -1;
+
+const $ = (s) => document.querySelector(s);
+const el = (tag, props = {}, kids = []) => {
+  const e = Object.assign(document.createElement(tag), props);
+  kids.forEach((k) => e.append(k));
+  return e;
+};
+
+async function load() {
+  const r = await chrome.storage.sync.get('nbx');
+  S = NBX.merge(r.nbx);
+  render();
+}
+
+// 저장은 0.4초 모아서 한 번에 합니다(색상 선택기를 끌 때 저장 한도 초과 방지)
+let savedTimer, saveTimer, pending = false;
+function flush() {
+  clearTimeout(saveTimer);
+  if (!pending) return Promise.resolve();
+  pending = false;
+  return chrome.storage.sync.set({ nbx: S }).then(() => {
+    $('#saved').style.color = '';
+    $('#saved').textContent = '저장되었습니다';
+  }).catch((e) => {
+    $('#saved').style.color = '#c62828';
+    $('#saved').textContent = '저장 실패: ' + e.message;
+  }).finally(() => {
+    clearTimeout(savedTimer);
+    savedTimer = setTimeout(() => ($('#saved').textContent = ''), 2000);
+  });
+}
+function save() {
+  pending = true;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flush, 400);
+}
+window.addEventListener('pagehide', flush);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+
+function keyHTML(i) {
+  const k = S.keys[i];
+  const name = `단축키${i + 1} `;
+  return k && k.code
+    ? `${name}<small>(${NBX.keyLabel(k, IS_MAC)})</small>`
+    : `${name}<span class="unset">(미설정)</span>`;
+}
+
+function renderSlots() {
+  const box = $('#slots');
+  box.innerHTML = '';
+  for (let i = 0; i < NBX.SLOT_COUNT; i++) {
+    const kb = el('button', { className: 'keybtn' + (recording === i ? ' rec' : ''), innerHTML: recording === i ? '키를 누르세요…' : keyHTML(i) });
+    kb.addEventListener('click', () => { recording = recording === i ? -1 : i; renderSlots(); });
+    const sel = el('select');
+    NBX.FEATURES.forEach((f) => sel.append(el('option', { value: f.id, textContent: f.label, selected: S.slots[i] === f.id })));
+    sel.addEventListener('change', () => { S.slots[i] = sel.value; save(); renderSlots(); renderStyles(); renderCmds(); });
+    const d = el('span', { className: 'fdesc', textContent: NBX.byId[S.slots[i]]?.desc || '' });
+    box.append(el('div', { className: 'slot' }, [kb, sel, d]));
+  }
+  checkDup();
+}
+
+function checkDup() {
+  const seen = {};
+  const dups = [];
+  S.keys.forEach((k, i) => {
+    if (!k || !k.code || S.slots[i] === 'none') return;
+    const sig = NBX.keyLabel(k, IS_MAC);
+    if (seen[sig] !== undefined) dups.push(`${sig} (단축키${seen[sig] + 1}, 단축키${i + 1})`);
+    else seen[sig] = i;
+  });
+  $('#dup').textContent = dups.length ? '같은 키가 겹칩니다: ' + dups.join(', ') + ' — 앞 번호 단축키만 작동합니다.' : '';
+}
+
+document.addEventListener('keydown', (e) => {
+  if (recording < 0) return;
+  e.preventDefault();
+  if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
+  if (e.key === 'Escape') { recording = -1; renderSlots(); return; }
+  if (e.key === 'Backspace' || e.key === 'Delete') {
+    S.keys[recording] = { code: '' };
+  } else {
+    if (!e.ctrlKey && !e.altKey && !e.metaKey) {
+      alert('글을 쓰다가 실수로 눌리지 않도록 Ctrl·Alt·Cmd 중 하나를 함께 눌러 주세요.');
+      return;
+    }
+    S.keys[recording] = { ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey, meta: e.metaKey, code: e.code };
+  }
+  recording = -1;
+  save();
+  renderSlots();
+});
+
+function renderStyles() {
+  const box = $('#styles');
+  box.innerHTML = '';
+  S.slots.forEach((fid, i) => {
+    const f = NBX.byId[fid];
+    if (!f || !f.styleable) return;
+    const st = S.styles[i];
+    const fontSel = el('select');
+    fontSel.append(el('option', { value: '', textContent: '폰트(유지)' }));
+    NBX.FONTS.forEach((n) => fontSel.append(el('option', { value: n, textContent: n, selected: st.font === n })));
+    fontSel.addEventListener('change', () => { st.font = fontSel.value; save(); pv(); });
+
+    const sizeSel = el('select');
+    sizeSel.append(el('option', { value: '', textContent: '크기(유지)' }));
+    NBX.SIZES.forEach((n) => sizeSel.append(el('option', { value: String(n), textContent: n, selected: String(st.size) === String(n) })));
+    sizeSel.addEventListener('change', () => { st.size = sizeSel.value; save(); pv(); });
+
+    const tg = (key, txt, css, disabled) => {
+      const b = el('button', { className: 'tg' + (st[key] ? ' on' : ''), innerHTML: txt, disabled: !!disabled });
+      b.style.cssText = css;
+      b.title = { bold: '볼드', italic: '기울임', underline: '밑줄', strike: '취소선' }[key];
+      b.addEventListener('click', () => { st[key] = !st[key]; b.classList.toggle('on', st[key]); save(); pv(); });
+      return b;
+    };
+
+    const colorCtl = (key, name, def) => {
+      const cb = el('input', { type: 'checkbox', checked: !!st[key] });
+      const ci = el('input', { type: 'color', value: st[key] || def, disabled: !st[key] });
+      cb.addEventListener('change', () => { ci.disabled = !cb.checked; st[key] = cb.checked ? ci.value : ''; save(); pv(); });
+      ci.addEventListener('input', () => { st[key] = ci.value; save(); pv(); });
+      return el('label', { className: 'clr' }, [cb, name, ci]);
+    };
+
+    const preview = el('div', { className: 'preview' });
+    const pv = () => {
+      const isTitle = fid === 'sectionTitle', isQ = fid === 'quote1';
+      const t = el('span', { textContent: isTitle ? '소제목 미리보기 문장입니다' : isQ ? '인용구로 강조할 문장입니다' : '본문 미리보기 문장입니다' });
+      const size = st.size ? +st.size : isTitle ? 24 : isQ ? 19 : 15;
+      t.style.cssText = `font-size:${size}px;` +
+        (st.font && st.font !== '기본서체' ? `font-family:'${st.font}',serif;` : '') +
+        (st.bold || isTitle ? 'font-weight:700;' : '') + (st.italic ? 'font-style:italic;' : '') +
+        `text-decoration:${[st.underline && 'underline', st.strike && !f.noStrike && 'line-through'].filter(Boolean).join(' ') || 'none'};` +
+        (st.color ? `color:${st.color};` : '') + (st.bg ? `background:${st.bg};` : '');
+      preview.className = 'preview' + (isQ ? ' pv-quote1' : '');
+      preview.innerHTML = '';
+      preview.append(isQ ? el('div', { textContent: '❝', style: 'font-size:22px;color:#999' }) : '', t);
+    };
+    pv();
+
+    const k = S.keys[i] && S.keys[i].code ? `(${NBX.keyLabel(S.keys[i], IS_MAC)})` : '(미설정)';
+    box.append(el('div', { className: 'card' }, [
+      el('div', { className: 'card-h', innerHTML: `<span>단축키${i + 1} <small>${k} · ${f.label}</small></span>` }),
+      el('div', { className: 'row' }, [
+        fontSel, sizeSel,
+        tg('bold', '<b>B</b>', '', f.noBold), tg('italic', '<i>I</i>', ''), tg('underline', '<u>U</u>', ''),
+        tg('strike', '<s>S</s>', '', f.noStrike),
+        colorCtl('color', '글자색', '#ff0010'), colorCtl('bg', '배경색', '#ffd400')
+      ]),
+      preview
+    ]));
+  });
+  if (!box.children.length) box.append(el('p', { className: 'fdesc', textContent: '소제목·인용구1·본문·볼드 기능이 배정된 슬롯이 없습니다.' }));
+}
+
+function renderGeneral() {
+  const q = $('#q2style');
+  q.innerHTML = '';
+  NBX.QUOTE_STYLES.forEach((s) => q.append(el('option', { value: s.id, textContent: s.label, selected: S.quote2Style === s.id })));
+  $('#showBar').checked = S.showBar;
+  $('#showPopup').checked = S.showPopup;
+  $('#showPanel').checked = S.showPanel;
+  $('#tipsUrl').value = S.tipsUrl || '';
+  document.querySelectorAll('input[name="barMode"]').forEach((r) => (r.checked = r.value === S.barMode));
+  document.querySelectorAll('.extra').forEach((c) => (c.checked = (S.popupExtras || []).includes(c.value)));
+}
+
+async function renderCmds() {
+  const box = $('#cmds');
+  if (!box || !chrome.commands) return;
+  const list = await chrome.commands.getAll();
+  box.innerHTML = '';
+  list.filter((c) => /^slot-\d$/.test(c.name)).sort((a, b) => a.name.localeCompare(b.name)).forEach((c) => {
+    const i = Number(c.name.slice(5)) - 1;
+    const f = NBX.byId[S.slots[i]];
+    const row = el('div', { className: 'cmdrow' });
+    row.append(el('span', { textContent: `단축키${i + 1} · ${f ? f.label : '사용 안 함'}` }),
+      el('em', { className: c.shortcut ? '' : 'unset', textContent: c.shortcut || '미설정' }));
+    box.append(row);
+  });
+}
+
+function render() { renderSlots(); renderGeneral(); renderStyles(); renderCmds(); }
+
+$('#openShortcuts').addEventListener('click', () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
+// 크롬 단축키 화면에서 돌아오면 현황을 새로 읽습니다
+window.addEventListener('focus', renderCmds);
+
+$('#q2style').addEventListener('change', (e) => { S.quote2Style = e.target.value; save(); });
+$('#showBar').addEventListener('change', (e) => { S.showBar = e.target.checked; save(); });
+$('#showPopup').addEventListener('change', (e) => { S.showPopup = e.target.checked; save(); });
+$('#showPanel').addEventListener('change', (e) => { S.showPanel = e.target.checked; save(); });
+$('#tipsUrl').addEventListener('input', (e) => {
+  const v = e.target.value.trim();
+  e.target.style.borderColor = !v || /^https?:\/\/\S+$/i.test(v) ? '' : '#d32f2f';
+  if (!v || /^https?:\/\/\S+$/i.test(v)) { S.tipsUrl = v; save(); }
+});
+$('#tipsPreview').addEventListener('click', () => chrome.runtime.sendMessage({ type: 'nbx-open-tips', hash: '' }));
+document.querySelectorAll('input[name="barMode"]').forEach((r) => r.addEventListener('change', () => { if (r.checked) { S.barMode = r.value; save(); } }));
+document.querySelectorAll('.extra').forEach((c) => c.addEventListener('change', () => {
+  S.popupExtras = [...document.querySelectorAll('.extra:checked')].map((x) => x.value);
+  save();
+}));
+$('#reset').addEventListener('click', () => {
+  if (!confirm('모든 단축키와 글자 모양 설정을 처음 상태로 되돌릴까요?')) return;
+  S = NBX.clone(NBX.DEFAULTS);
+  save();
+  render();
+});
+
+$('#partner').href = NBX.PARTNER.url;
+$('#disc').textContent = NBX.PARTNER.disclosure;
+
+load();

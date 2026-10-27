@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "about": "토이블록 확장이 6시간마다 읽는 온라인 설정입니다. 실행 코드 없이 데이터만 넣습니다. selectors는 네이버 에디터 버튼을 찾을 때 먼저 시도할 이름(클래스·data-name·글자)입니다.",
+  "selectors": {},
+  "partner": { "url": "https://link.coupang.com/a/iciJJKMF2a" }
+}

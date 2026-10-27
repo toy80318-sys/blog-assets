@@ -1,0 +1,65 @@
+/* ── 공통 버튼 ── */
+.nbx-btn {
+  border: 1px solid #e3e6ea; background: #f8f9fa; color: #222; border-radius: 7px;
+  padding: 5px 9px; font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+}
+.nbx-btn:hover { background: #e9f8ef; border-color: #03a94d; color: #027a38; }
+.nbx-btn[data-feature="colorRed"] { color: #e0002a; }
+.nbx-btn[data-feature="colorBlue"] { color: #0068c8; }
+.nbx-btn[data-feature="highlight"] { background: #fff4b3; }
+
+/* ── 상단 고정 버튼 줄 (기본) ── */
+#nbx-bar.nbx-top {
+  position: fixed; z-index: 2147483000; display: flex; align-items: center; gap: 4px;
+  box-sizing: border-box; padding: 3px 5px; background: #fff; border: 1px solid #d9e8df; border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(3, 169, 77, .12);
+  font: 13px/1.2 -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none; white-space: nowrap; user-select: none;
+}
+#nbx-bar.nbx-top::-webkit-scrollbar { display: none; }
+#nbx-bar.nbx-top .nbx-logo {
+  flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+  background: #03a94d; color: #fff; font-weight: 800; font-size: 12px; margin-right: 2px;
+}
+#nbx-bar.nbx-top .nbx-btn {
+  flex: none; display: inline-flex; align-items: center; gap: 3px; height: 28px; padding: 0 8px;
+  border-color: transparent; background: #f3f6f4; font-size: 12px; font-weight: 600;
+}
+#nbx-bar.nbx-top .nbx-btn:hover { background: #e3f6ea; border-color: #03a94d; }
+#nbx-bar.nbx-top .nbx-btn:active { transform: translateY(1px); }
+#nbx-bar.nbx-top .nbx-btn small { font-size: 10px; font-weight: 500; color: #8a94a3; letter-spacing: .02em; }
+#nbx-bar.nbx-top.nbx-compact .nbx-btn small { display: none; }
+#nbx-bar.nbx-top.nbx-compact .nbx-btn { padding: 0 7px; }
+#nbx-bar.nbx-top .nbx-gear {
+  flex: none; border: 0; background: none; color: #9aa3ae; font-size: 14px; cursor: pointer; padding: 0 4px; height: 28px;
+}
+#nbx-bar.nbx-top .nbx-gear:hover { color: #027a38; }
+
+/* ── 떠 있는 바 (선택) ── */
+#nbx-bar.nbx-float {
+  position: fixed; right: 24px; bottom: 24px; z-index: 2147483000;
+  display: flex; align-items: center; gap: 6px; max-width: calc(100vw - 32px);
+  padding: 6px 8px; background: #fff; border: 1px solid #d9dde3; border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(20, 30, 50, .14); font: 13px/1.2 -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+}
+#nbx-bar.nbx-float .nbx-handle { cursor: move; color: #03a94d; font-weight: 700; padding: 0 4px; user-select: none; white-space: nowrap; touch-action: none; }
+#nbx-bar.nbx-float .nbx-btns { display: flex; flex-wrap: wrap; gap: 4px; }
+#nbx-bar.nbx-float.nbx-collapsed .nbx-btns { display: none; }
+#nbx-bar.nbx-float .nbx-min { border: 0; background: #f1f3f5; border-radius: 6px; width: 24px; height: 24px; cursor: pointer; color: #555; }
+
+/* ── 텍스트 선택 팝업 ── */
+#nbx-pop {
+  position: fixed; z-index: 2147483001; display: none; gap: 4px; flex-wrap: wrap; max-width: 420px;
+  padding: 5px; background: #fff; border: 1px solid #d9dde3; border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(20, 30, 50, .16); font: 13px/1.2 -apple-system, "Malgun Gothic", sans-serif;
+}
+
+/* ── 알림 ── */
+#nbx-toast {
+  position: fixed; left: 50%; top: 58px; transform: translate(-50%, -20px); opacity: 0; pointer-events: none;
+  z-index: 2147483002; padding: 9px 16px; border-radius: 9px; background: #222; color: #fff;
+  font: 13px/1.3 -apple-system, "Malgun Gothic", sans-serif; transition: all .2s;
+}
+#nbx-toast.nbx-show { opacity: 1; transform: translate(-50%, 0); }
+#nbx-toast.nbx-err { background: #c62828; }
+#nbx-toast.nbx-warn { background: #b26a00; }

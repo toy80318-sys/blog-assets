@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>토이블록 네이버 블로그 도우미 · 설치 방법</title>
+<style>
+  :root { --g: #03a94d; --gd: #027a38; --gl: #e9f8ef; --ink: #1f2328; --sub: #5b6573; --line: #e3e7ec; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f4f6f5; color: var(--ink); font: 16px/1.75 Pretendard, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans CJK KR", sans-serif; word-break: keep-all; }
+  .page { max-width: 920px; margin: 0 auto; padding: 32px 20px 60px; }
+  .hero { background: linear-gradient(135deg, #03a94d, #027a38); color: #fff; border-radius: 20px; padding: 30px 28px; }
+  .hero .eb { font-size: 12px; font-weight: 800; letter-spacing: .18em; opacity: .85; }
+  .hero h1 { margin: 6px 0 8px; font-size: 30px; line-height: 1.3; letter-spacing: -.02em; }
+  .hero p { margin: 0; opacity: .95; }
+  .toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 0; }
+  .toc a { background: var(--gl); color: var(--gd); text-decoration: none; font-weight: 700; font-size: 14px; padding: 6px 13px; border-radius: 999px; }
+  section { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 24px 24px 10px; margin-top: 20px; }
+  h2 { margin: 0 0 6px; font-size: 22px; letter-spacing: -.01em; }
+  h2 small { font-size: 14px; color: var(--sub); font-weight: 500; margin-left: 6px; }
+  h3 { margin: 22px 0 6px; font-size: 18px; }
+  p { margin: 0 0 12px; }
+  .step { display: flex; gap: 14px; margin: 22px 0 8px; }
+  .num { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--g); color: #fff; font-weight: 800; display: grid; place-items: center; font-size: 16px; margin-top: 2px; }
+  .step h3 { margin: 4px 0 4px; }
+  figure { margin: 10px 0 16px; }
+  figure img { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 4px 14px rgba(20, 30, 50, .06); }
+  figure.narrow img { max-width: 340px; }
+  figcaption { font-size: 13.5px; color: var(--sub); margin-top: 6px; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+  .row figure { flex: 1 1 280px; }
+  kbd { display: inline-block; font: 600 13px/1 ui-monospace, Consolas, monospace; background: #f1f3f5; border: 1px solid #d5dae0; border-bottom-width: 2px; border-radius: 6px; padding: 4px 7px; }
+  code { background: #f1f3f5; border-radius: 6px; padding: 2px 6px; font-size: 14px; }
+  .note { background: #fff8e8; border: 1px solid #f3dca8; border-radius: 12px; padding: 12px 16px; margin: 10px 0 16px; font-size: 15px; }
+  .note b { color: #9a5b00; }
+  .tip { background: var(--gl); border-radius: 12px; padding: 12px 16px; margin: 10px 0 16px; font-size: 15px; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; margin: 8px 0 16px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 9px 8px; text-align: left; vertical-align: top; }
+  th { color: var(--sub); font-size: 13.5px; background: #f8faf9; }
+  td:first-child { white-space: nowrap; font-weight: 700; }
+  .qa h3 { font-size: 16.5px; margin-top: 18px; }
+  .foot { font-size: 13px; color: var(--sub); text-align: center; margin-top: 26px; }
+  @media print {
+    body { background: #fff; font-size: 14px; }
+    .page { padding: 0; }
+    section { break-inside: auto; border: 0; padding: 12px 0 0; }
+    .step, figure { break-inside: avoid; }
+    .toc { display: none; }
+  }
+  @media (max-width: 640px) { .hero h1 { font-size: 24px; } section { padding: 18px 16px 6px; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="hero">
+  <div class="eb">TOYBLOCK · 설치 안내 · v1.5</div>
+  <h1>토이블록 네이버 블로그 도우미 설치 방법</h1>
+  <p>소제목·인용구 단축키, 글쓰기 화면 상단 단축키 버튼, 블로그 분석 패널과 블로그 점수를 크롬에 한 번에 설치합니다. 처음 설치는 5분이면 끝납니다.</p>
+</div>
+<nav class="toc">
+  <a href="#install">설치하기</a><a href="#keys">단축키 확인</a><a href="#use">사용하기</a><a href="#update">업데이트</a><a href="#qa">문제 해결</a>
+</nav>
+
+<section id="install">
+  <h2>설치하기 <small>처음 한 번</small></h2>
+
+  <div class="step"><div class="num">1</div><div>
+    <h3>압축 풀기</h3>
+    <p>받은 zip 파일을 마우스 오른쪽 버튼으로 눌러 <b>압축 풀기</b>를 고릅니다. 안에 있는 <b>nbx</b> 폴더가 크롬에 불러올 확장 프로그램입니다.</p>
+  </div></div>
+  <figure><img src="설치방법_이미지/01_unzip.png" alt="압축을 풀면 nbx 폴더가 나옵니다"></figure>
+  <div class="note"><b>폴더 위치를 정해 두세요.</b> 크롬은 nbx 폴더를 계속 읽어서 작동합니다. 문서 폴더처럼 오래 둘 곳에 놓고, 설치한 뒤에는 그 자리에 그대로 두세요.</div>
+
+  <div class="step"><div class="num">2</div><div>
+    <h3>확장 프로그램 화면 열고 개발자 모드 켜기</h3>
+    <p>크롬 주소창에 <code>chrome://extensions</code>를 입력하고 <kbd>Enter</kbd>를 누릅니다. 오른쪽 위의 <b>개발자 모드</b> 스위치를 켭니다.</p>
+  </div></div>
+  <figure><img src="설치방법_이미지/02_devmode.png" alt="오른쪽 위 개발자 모드 스위치"></figure>
+  <div class="tip">예전 버전의 토이블록(또는 "네이버 블로그 서식 단축키")을 설치한 적이 있다면, 이 화면에서 그 카드의 <b>삭제</b>를 먼저 눌러 주세요. 새로 설치해야 크롬 단축키가 자동으로 지정됩니다.</div>
+
+  <div class="step"><div class="num">3</div><div>
+    <h3>압축해제된 확장 프로그램 로드</h3>
+    <p>왼쪽 위에 생긴 <b>압축해제된 확장 프로그램 로드</b>를 누르고, 1단계의 <b>nbx</b> 폴더를 선택한 뒤 <b>폴더 선택</b>을 누릅니다.</p>
+  </div></div>
+  <figure><img src="설치방법_이미지/03_load.png" alt="압축해제된 확장 프로그램 로드 버튼"></figure>
+
+  <div class="step"><div class="num">4</div><div>
+    <h3>설치 확인</h3>
+    <p>목록에 <b>토이블록 네이버 블로그 도우미 1.5.0</b> 카드가 생기면 설치가 끝났습니다. 카드의 스위치가 파란색으로 켜져 있는지 확인합니다.</p>
+  </div></div>
+  <figure><img src="설치방법_이미지/04_card.png" alt="설치된 토이블록 카드"></figure>
+
+  <div class="step"><div class="num">5</div><div>
+    <h3>툴바에 아이콘 고정</h3>
+    <p>주소창 오른쪽 <b>퍼즐 아이콘</b>을 누르고 토이블록 옆의 <b>핀</b>을 누릅니다. 초록색 <b>T</b> 아이콘이 항상 보여서 설정과 점검을 바로 열 수 있습니다.</p>
+  </div></div>
+  <figure><img src="설치방법_이미지/12_pin.png" alt="퍼즐 아이콘에서 토이블록 고정"></figure>
+
+  <div class="step"><div class="num">6</div><div>
+    <h3>열려 있던 블로그 탭 새로고침</h3>
+    <p>설치 전에 열어 둔 네이버 블로그 탭은 <kbd>F5</kbd>로 새로고침해야 토이블록이 작동합니다.</p>
+  </div></div>
+</section>
+
+<section id="keys">
+  <h2>단축키 확인 <small>설치 직후 한 번</small></h2>
+  <p>토이블록은 <b>크롬 단축키</b>로 작동합니다. 크롬이 키를 먼저 받아 네이버 에디터에 전달하므로 글쓰기 화면에서도 확실하게 듣습니다. 기본 지정은 아래와 같습니다.</p>
+  <table>
+    <tr><th>단축키</th><th>기본 기능</th></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>1</kbd></td><td>엔터+소제목 (엔터로 새 줄을 만든 뒤 그 줄을 소제목으로. 글자를 선택해 둔 상태면 그 문단 아래에 새 소제목 줄)</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>2</kbd></td><td>인용구1 (선택한 문단을 인용구 서식으로)</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>3</kbd></td><td>인용구2 (버티컬 라인 인용구 블록 삽입)</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>4</kbd></td><td>이미지</td></tr>
+    <tr><td>단축키 5~8</td><td>가운데정렬 · 글자크기+ · 볼드 · 링크삽입 (크롬 단축키 화면에서 직접 지정)</td></tr>
+  </table>
+
+  <h3>크롬 단축키 화면에서 확인하기</h3>
+  <p>주소창에 <code>chrome://extensions/shortcuts</code>를 입력하거나, 토이블록 설정의 <b>크롬 단축키 직접 설정 열기</b>를 누릅니다. 단축키1~4에 <b>Ctrl + Shift + 1~4</b>가 들어 있으면 준비가 끝났습니다.</p>
+  <figure><img src="설치방법_이미지/06_shortcuts.png" alt="크롬 단축키 화면"></figure>
+  <div class="note"><b>"설정 안됨"으로 나온다면</b> 다른 확장 프로그램이 같은 키를 먼저 쓰고 있는 경우입니다. 예를 들어 다른 블로그 도우미 확장이 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>1~4</kbd>를 쓰고 있으면 크롬은 토이블록에 그 키를 주지 않습니다. 그 확장의 단축키를 지우고 토이블록 칸의 연필(✎)을 눌러 원하는 키를 누르거나, <kbd>Alt</kbd>+<kbd>1</kbd>처럼 다른 조합을 지정하면 됩니다.</div>
+
+  <h3>토이블록 설정에서 한눈에 보기</h3>
+  <p>초록색 <b>T</b> 아이콘 → <b>단축키 · 글자 모양 설정</b>을 열면 빨간 상자에 지금 지정된 크롬 단축키가 보입니다. 각 단축키에 어떤 기능을 붙일지, 소제목·인용구에 함께 적용할 글꼴·크기·색도 여기서 고릅니다.</p>
+  <figure><img src="설치방법_이미지/07_options.png" alt="토이블록 설정의 크롬 단축키 상자"></figure>
+</section>
+
+<section id="use">
+  <h2>사용하기</h2>
+
+  <h3>글쓰기 화면 — 단축키와 상단 버튼</h3>
+  <p>네이버 블로그 글쓰기 화면에서 본문을 한 번 클릭하고 단축키를 누르면 바로 적용되고, 화면 위에 "엔터+소제목 적용" 같은 알림이 잠깐 뜹니다. 본문을 쓰다가 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>1</kbd>을 누르면 다음 줄이 바로 소제목이 되어 이어서 제목을 쓸 수 있습니다. 이미 써 둔 문단을 소제목으로 바꿀 때는 그 글자를 드래그해 뜨는 미니 팝업의 <b>소제목</b>을 누르면 됩니다. 단축키가 듣지 않는 상황에서는 <b>상단 빈 곳의 단축키 버튼</b>을 눌러도 똑같이 실행됩니다. 버튼을 눌러도 본문에서 선택한 글자는 그대로 유지됩니다.</p>
+  <figure><img src="설치방법_이미지/08_topbar.png" alt="글쓰기 화면 상단의 토이블록 단축키 버튼"><figcaption>버튼 줄은 블로그 이름과 저장·발행 버튼 사이의 빈 곳에 자리를 잡습니다. 설정에서 "떠 있는 바"로 바꾸면 끌어서 원하는 위치에 둘 수 있습니다.</figcaption></figure>
+
+  <h3>블로그를 볼 때 — 분석 패널과 블로그 점수</h3>
+  <p>네이버 블로그를 열면 화면 왼쪽에 <b>블로그 분석</b> 버튼이 작게 붙어 있습니다. 누르면 아래로 펼쳐지고, 글을 스크롤해도 같은 자리에 머뭅니다.</p>
+  <figure><img src="설치방법_이미지/09_pill.png" alt="왼쪽의 블로그 분석 버튼"></figure>
+  <div class="row">
+    <figure class="narrow"><img src="설치방법_이미지/10_channel.png" alt="채널 분석"><figcaption><b>채널 분석</b> — 방문자·이웃·전체 글, 100점 블로그 점수, 검색 노출 지수, 발행 분석, 인기글</figcaption></figure>
+    <figure class="narrow"><img src="설치방법_이미지/11_post.png" alt="포스트 분석"><figcaption><b>포스트 분석</b> — 글자 수, 문단·이미지·링크·소제목·인용구, 제목 키워드 반복, 핵심 키워드, 이 글의 검색 순위</figcaption></figure>
+  </div>
+  <p><b>노출 확인 시작</b>을 누르면 최근 글 30편을 제목으로 하나씩 검색해 검색 노출 점수(40점)를 채웁니다. 사람이 검색하는 속도에 맞춰 1분 정도 걸리고, 결과는 12시간 동안 저장됩니다. 점수 카드의 <b>블로그 점수 올리는 법 보기</b>를 누르면 가장 낮은 항목의 개선 방법 페이지가 열립니다.</p>
+
+  <h3>블로그 점수 가이드를 아임웹에 올리기</h3>
+  <p>압축 파일 안의 <b>아임웹_블로그점수가이드_코드.html</b>을 메모장으로 열어 전체를 복사합니다. 아임웹 디자인 모드에서 새 페이지에 <b>코드</b> 위젯을 넣고 붙여 넣은 뒤 저장합니다. 그 페이지 주소를 토이블록 설정의 <b>블로그 점수 팁 페이지 주소</b> 칸에 넣으면, 패널의 버튼이 아임웹 페이지의 해당 항목으로 바로 연결됩니다. 주소 칸이 비어 있으면 확장 안에 들어 있는 같은 내용의 페이지가 열립니다.</p>
+
+  <h3>확장 아이콘 창</h3>
+  <div class="row">
+    <figure class="narrow"><img src="설치방법_이미지/05_popup.png" alt="확장 아이콘을 눌렀을 때 창"></figure>
+    <div style="flex:1 1 280px">
+      <p>초록색 <b>T</b> 아이콘을 누르면 지금 지정된 단축키 목록과 설정 버튼이 보입니다. 글쓰기 화면에서 열면 에디터 버튼을 제대로 찾았는지 ✓/✕로 점검해 줍니다.</p>
+      <p>✕가 보이면 <b>에디터 구조 정보 복사</b>를 눌러 개발자에게 보내 주세요. 툴바 버튼 정보만 복사되고 글 내용·닉네임·블로그 주소는 담기지 않습니다.</p>
+    </div>
+  </div>
+</section>
+
+<section id="update">
+  <h2>업데이트하기 <small>새 버전이 나왔을 때</small></h2>
+  <p>토이블록은 6시간마다 온라인으로 새 버전이 있는지 확인합니다. 새 버전이 나오면 확장 아이콘에 분홍색 <b>N</b> 표시가 뜨고, 아이콘을 누르면 맨 위에 바뀐 내용과 <b>새 버전 받기</b> 버튼이 보입니다. 아이콘 창 맨 아래의 <b>업데이트 확인</b>을 누르면 바로 확인할 수도 있습니다.</p>
+  <div class="step"><div class="num">1</div><div><p style="margin-top:4px"><b>새 버전 받기</b>로 zip을 내려받아 압축을 풀고, 안의 <b>nbx</b> 폴더 파일들로 지금 쓰는 nbx 폴더의 파일을 <b>덮어씁니다</b>.</p></div></div>
+  <div class="step"><div class="num">2</div><div><p style="margin-top:4px"><code>chrome://extensions</code>에서 토이블록 카드의 <b>새로고침(↻)</b> 버튼을 누릅니다. 설정해 둔 단축키와 글자 모양은 그대로 남습니다.</p></div></div>
+  <div class="step"><div class="num">3</div><div><p style="margin-top:4px">열려 있는 블로그 탭을 <kbd>F5</kbd>로 새로고침합니다.</p></div></div>
+  <div class="tip">네이버가 에디터 화면을 바꿔 버튼을 못 찾게 되는 경우에는 대부분 업데이트 없이 온라인 설정만으로 고쳐집니다. 이때는 아무것도 하지 않아도 6시간 안에 저절로 반영됩니다. 크롬 웹스토어에서 설치했다면 새 버전도 크롬이 알아서 업데이트합니다.</div>
+  <p>최신 버전과 바뀐 내용은 언제든 <b>github.com/toy80318-sys/blog-assets</b>의 <b>toyblock-extension</b> 폴더에서 볼 수 있습니다.</p>
+</section>
+
+<section id="qa" class="qa">
+  <h2>문제 해결</h2>
+  <h3>단축키를 눌러도 아무 일이 없어요.</h3>
+  <p>크롬 단축키 화면에서 단축키1~4가 "설정 안됨"인지 먼저 확인합니다. 지정돼 있다면 블로그 탭을 <kbd>F5</kbd>로 새로고침하고 본문을 한 번 클릭한 뒤 다시 누릅니다. 그 사이에도 글쓰기 화면 상단의 토이블록 버튼은 클릭으로 바로 쓸 수 있습니다.</p>
+  <h3>"버튼을 찾지 못했습니다"라는 빨간 알림이 떠요.</h3>
+  <p>네이버 에디터 화면 구성이 바뀌었을 가능성이 있습니다. 글쓰기 화면에서 확장 아이콘 → <b>에디터 구조 정보 복사</b>를 눌러 보내 주시면 맞춰 고쳐 드립니다.</p>
+  <h3>블로그 분석 버튼이 보이지 않아요.</h3>
+  <p>분석 패널은 블로그 글을 볼 때 나타나고, 글쓰기 화면에서는 에디터를 가리지 않도록 숨겨집니다. 설정의 "블로그 화면 왼쪽에 분석 패널 표시"가 켜져 있는지도 확인해 주세요.</p>
+  <h3>노출 확인이 중간에 멈췄어요.</h3>
+  <p>네이버 검색이 잠시 응답하지 않으면 자동으로 멈춥니다. 몇 분 뒤 <b>다시 확인</b>을 누르면 이미 확인한 글은 건너뛰고 이어서 확인합니다.</p>
+  <h3>크롬을 켤 때 "개발자 모드 확장 프로그램" 알림이 떠요.</h3>
+  <p>직접 불러온 확장 프로그램에 크롬이 띄우는 안내입니다. 닫기를 누르면 되고, 토이블록은 그대로 작동합니다.</p>
+</section>
+
+<p class="foot">토이블록 네이버 블로그 도우미 v1.5 · 확장 화면 하단의 쿠팡 배너는 쿠팡 파트너스 링크입니다.<br>이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
+</div>
+</body>
+</html>

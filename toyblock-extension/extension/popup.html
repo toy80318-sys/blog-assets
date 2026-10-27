@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<style>
+  body { width: 300px; margin: 0; font: 13px/1.5 -apple-system, "Malgun Gothic", sans-serif; color: #1f2328; }
+  header { background: #03a94d; color: #fff; padding: 12px 14px; font-weight: 700; font-size: 15px; }
+  main { padding: 12px 14px; }
+  .status { padding: 8px 10px; border-radius: 8px; background: #f1f3f5; margin-bottom: 10px; }
+  .status.ok { background: #e9f8ef; color: #027a38; }
+  .status.no { background: #fff3e0; color: #8a5300; }
+  ul { list-style: none; margin: 0 0 10px; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; font-size: 12.5px; }
+  li.bad { color: #c62828; }
+  .keys { font-size: 12.5px; margin-bottom: 10px; }
+  .keys div { display: flex; justify-content: space-between; border-bottom: 1px solid #f1f3f5; padding: 3px 0; }
+  .keys span:last-child { color: #6b7280; }
+  .partner { display: block; margin: 12px 14px 12px; padding: 10px 12px; border-radius: 10px; text-decoration: none; background: linear-gradient(120deg, #fff7ec, #ffeeda); border: 1px solid #f6d7b0; color: #3b2a14; }
+  .partner b { display: block; font-size: 13px; }
+  .partner span { font-size: 11.5px; color: #8a6a3f; }
+  .partner:hover { border-color: #e8a256; }
+  .upd { border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; background: #fdecef; border: 1px solid #f5c2cc; }
+  .upd b { color: #b4234b; } .upd p { margin: 4px 0 8px; font-size: 12px; color: #6b4a52; white-space: pre-line; }
+  .upd a { display: block; text-align: center; padding: 8px; border-radius: 8px; background: #e8547a; color: #fff; text-decoration: none; font-weight: 700; margin-top: 6px; }
+  .upd a.sub { background: #fff; color: #b4234b; border: 1px solid #f5c2cc; }
+  .ver { font-size: 11.5px; color: #8a94a3; margin: 10px 0 0; text-align: center; }
+  .ver button { width: auto; display: inline; border: 0; background: none; color: #027a38; padding: 0 2px; margin: 0; font-size: 11.5px; text-decoration: underline; }
+  .disc { font-size: 10.5px; color: #9aa3ae; margin: -6px 14px 12px; line-height: 1.4; }
+  button { width: 100%; padding: 9px; border-radius: 8px; border: 1px solid #03a94d; background: #fff; color: #027a38; font: inherit; cursor: pointer; margin-top: 6px; }
+  button.primary { background: #03a94d; color: #fff; }
+</style>
+</head>
+<body>
+<header>토이블록 네이버 블로그 도우미</header>
+<main>
+  <div id="upd"></div>
+  <div id="status" class="status">확인 중…</div>
+  <ul id="diag"></ul>
+  <div class="keys" id="keys"></div>
+  <button class="primary" id="opt">단축키 · 글자 모양 설정</button>
+  <button id="re">에디터 다시 점검</button>
+  <button id="dump" title="버튼이 ✕로 나올 때 눌러서 개발자에게 보내 주세요">에디터 구조 정보 복사</button>
+  <div id="dumpMsg" style="font-size:12px;color:#6b7280;margin-top:6px"></div>
+  <p class="ver" id="ver"></p>
+</main>
+<a class="partner" id="partner" target="_blank" rel="noopener sponsored"><b>🛒 쿠팡에서 오늘의 추천 상품 보기 →</b><span>블로그 작업 장비·생활용품 둘러보기</span></a>
+<p class="disc" id="disc"></p>
+<script src="features.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>
