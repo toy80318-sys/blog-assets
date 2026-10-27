@@ -51,6 +51,7 @@
     barMode: 'top', // 'top' = 글쓰기 화면 상단 빈 곳에 고정, 'float' = 끌어서 옮기는 떠 있는 바
     showPopup: true,
     showPanel: true,
+    trustedEnter: true, // 확실한 엔터 모드(크롬 디버거로 실제 키보드와 같은 엔터) — 설정에서 끌 수 있습니다
     tipsUrl: '', // 블로그 점수 팁 페이지 주소(아임웹 등). 비어 있으면 확장에 들어 있는 페이지를 엽니다
     popupExtras: ['colorRed', 'colorBlue']
   };
@@ -77,6 +78,7 @@
     if (!QUOTE_STYLES.some((q) => q.id === out.quote2Style)) out.quote2Style = d.quote2Style;
     if (out.barMode !== 'top' && out.barMode !== 'float') out.barMode = d.barMode;
     if (typeof out.tipsUrl !== 'string') out.tipsUrl = '';
+    out.trustedEnter = out.trustedEnter !== false;
     out.popupExtras = Array.isArray(out.popupExtras) ? out.popupExtras.filter((id) => byId[id]) : d.popupExtras;
     return out;
   }

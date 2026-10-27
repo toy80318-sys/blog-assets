@@ -364,7 +364,10 @@
   // ── 엔터 1회: 에디터가 직접 처리하면 그대로 두고, 아니면 브라우저 기본 줄바꿈으로 대신합니다(한 번만)
   const paraCount = () => document.querySelectorAll('.se-text-paragraph, [contenteditable="true"] p').length;
   const caretPara = () => { const s = window.getSelection(); const n = s && s.anchorNode; const el = n && (n.nodeType === 1 ? n : n.parentElement); return el && el.closest('.se-text-paragraph, p, .se-component'); };
+  let lastEnterTrace = null; // 진단용: 마지막 엔터 시도 기록
   async function pressEnter() {
+    const trace = { at: new Date().toISOString(), steps: [] };
+    lastEnterTrace = trace;
     const sel = window.getSelection();
     if (sel && sel.rangeCount && !sel.isCollapsed) {
       // 글자를 선택해 둔 경우: 선택 글자가 지워지거나 문장이 중간에서 나뉘지 않도록 그 문단 끝으로 커서를 옮깁니다
@@ -377,28 +380,57 @@
     const ae = document.activeElement;
     const anchor = sel && sel.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement);
     const target = (ae && ae !== document.body && ae !== document.documentElement) ? ae : (anchor && anchor.closest('[contenteditable="true"]')) || document.body;
-    const before = paraCount(), beforePara = caretPara();
-    const changed = () => paraCount() > before || caretPara() !== beforePara;
+    trace.target = `${target.tagName}.${cls(target).split(/\s+/).slice(0, 3).join('.')}` + (target.isContentEditable ? ' [editable]' : '');
+    trace.caretPara = (() => { const p = caretPara(); return p ? cls(p).split(/\s+/).slice(0, 3).join('.') : null; })();
+    const before = paraCount();
+    trace.before = before;
+    // 새 줄이 생겼는지는 문단 개수로만 판단합니다(에디터가 본문을 다시 그려도 잘못 판단하지 않게)
+    const changed = () => paraCount() > before;
+    // 브라우저 기본 줄바꿈 등 에디터 밖에서 바꾼 내용을 에디터가 되돌리는지까지 확인합니다
+    const settled = async (ms) => (await waitFor(changed, ms)) && (await sleep(120), changed());
+
+    // ① 확실한 엔터 모드: 실제 키보드와 같은 엔터(크롬 디버거)
+    if (settings.trustedEnter) {
+      const r = await chrome.runtime.sendMessage({ type: 'nbx-trusted-enter' }).catch((e) => ({ ok: false, error: String(e) }));
+      trace.steps.push({ way: 'debugger', ok: !!(r && r.ok), error: r && r.error });
+      if (r && r.ok && await settled(800)) { trace.result = 'debugger'; return true; }
+    }
+    // ② 에디터에 엔터 키 신호 보내기
     const init = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, composed: true, view: window };
     const kd = new KeyboardEvent('keydown', init);
     for (const k of ['keyCode', 'which']) { try { Object.defineProperty(kd, k, { get: () => 13 }); } catch (_) {} }
-    const handled = !target.dispatchEvent(kd);
-    if (handled) {
-      // 에디터가 엔터를 받아 처리했습니다. 새 줄이 그려질 때까지만 기다립니다
-      target.dispatchEvent(new KeyboardEvent('keyup', init));
-      await waitFor(changed, 500);
-      return;
-    }
+    const kdHandled = !target.dispatchEvent(kd);
     target.dispatchEvent(new KeyboardEvent('keyup', init));
+    // 에디터가 신호를 받아 처리했다면(기본 동작 취소) 새 줄이 그려질 때까지 기다리고, 아니면 바로 다음 방법으로 넘어갑니다
+    const okKey = await settled(kdHandled ? 600 : 80);
+    trace.steps.push({ way: 'keydown', handled: kdHandled, changed: okKey });
+    if (okKey) { trace.result = 'keydown'; return true; }
+    // ③ 입력 이벤트(새 문단) 보내기
     const bi = new InputEvent('beforeinput', { inputType: 'insertParagraph', bubbles: true, cancelable: true, composed: true });
-    if (!target.dispatchEvent(bi)) { await waitFor(changed, 500); return; }
-    // 에디터가 아무것도 하지 않았을 때만 브라우저 기본 줄바꿈을 한 번 실행합니다
-    if (!changed()) document.execCommand('insertParagraph');
-    await waitFor(changed, 300);
+    const biHandled = !target.dispatchEvent(bi);
+    const okBi = await settled(biHandled ? 500 : 60);
+    trace.steps.push({ way: 'beforeinput', handled: biHandled, changed: okBi });
+    if (okBi) { trace.result = 'beforeinput'; return true; }
+    // ④ 브라우저 기본 줄바꿈
+    let exec = false;
+    try { exec = document.execCommand('insertParagraph'); } catch (_) {}
+    const okExec = await settled(400);
+    trace.steps.push({ way: 'execCommand', ran: exec, changed: okExec });
+    if (okExec) { trace.result = 'execCommand'; return true; }
+    trace.result = 'failed';
+    trace.after = paraCount();
+    return false;
   }
 
   const ACTIONS = {
-    enterSectionTitle: async () => { await pressEnter(); await sleep(40); await setFormat('sectionTitle', '소제목'); },
+    enterSectionTitle: async () => {
+      if (!(await pressEnter())) {
+        // 새 줄을 만들지 못했을 때는 지금 문단을 소제목으로 바꾸지 않습니다(엉뚱한 문단이 바뀌지 않게)
+        throw new NbxError(settings.trustedEnter ? '엔터를 넣지 못했습니다. 본문을 한 번 클릭한 뒤 다시 눌러 주세요' : '엔터를 넣지 못했습니다. 설정에서 \'확실한 엔터 모드\'를 켜 주세요');
+      }
+      await sleep(60);
+      await setFormat('sectionTitle', '소제목');
+    },
     none: async () => {},
     sectionTitle: () => setFormat('sectionTitle', '소제목'),
     quote1: () => setFormat('quotation', '인용구'),
@@ -819,7 +851,11 @@
         .filter((b) => visible(b) && inToolbar(b))
         .slice(0, 250)
         .map((b) => ({ c: cls(b).split(/\s+/).filter((x) => x.startsWith('se-')).join(' '), n: b.getAttribute('data-name') || '', v: b.getAttribute('data-value') || '', t: b.getAttribute('data-type') || '', l: label(b).slice(0, 20), x: short(b) }));
-      send({ editor: true, frame: /PostWriteForm/i.test(location.pathname) ? 'PostWriteForm' : 'other', items, diag: diagnose() });
+      const ae = document.activeElement;
+      const focus = ae ? { tag: ae.tagName, cls: cls(ae).split(/\s+/).filter((x) => x.startsWith('se-') || x.startsWith('__se')).slice(0, 6).join(' '), editable: !!ae.isContentEditable, inFrame: ae.tagName === 'IFRAME' } : null;
+      const scripts = [...document.scripts].map((x) => x.src).filter((u) => /^https:\/\/[^/]*(pstatic\.net|naver\.(com|net))\//.test(u)).slice(0, 30);
+      const editables = [...document.querySelectorAll('[contenteditable="true"], textarea, iframe')].slice(0, 12).map((e) => `${e.tagName}.${cls(e).split(/\s+/).slice(0, 3).join('.')}`);
+      send({ editor: true, frame: /PostWriteForm/i.test(location.pathname) ? 'PostWriteForm' : 'other', version: chrome.runtime.getManifest().version, items, diag: diagnose(), enterTrace: lastEnterTrace, focus, editables, scripts });
       return false;
     }
     return false;

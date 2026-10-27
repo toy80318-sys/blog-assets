@@ -84,10 +84,31 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
   chrome.tabs.sendMessage(tab.id, { type: 'nbx-slot', slot: Number(m[1]) - 1 }).catch(() => {});
 });
 
+// 확실한 엔터 모드: 크롬 디버거로 실제 키보드와 같은 엔터를 현재 탭에 한 번 넣고 바로 연결을 끊습니다
+async function trustedEnter(tabId) {
+  if (!chrome.debugger) return { ok: false, error: 'no-permission' };
+  const target = { tabId };
+  try { await chrome.debugger.attach(target, '1.3'); } catch (e) { return { ok: false, error: 'attach: ' + (e.message || e) }; }
+  try {
+    const base = { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13, modifiers: 0 };
+    await chrome.debugger.sendCommand(target, 'Input.dispatchKeyEvent', { type: 'keyDown', text: '\r', unmodifiedText: '\r', ...base });
+    await chrome.debugger.sendCommand(target, 'Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: 'dispatch: ' + (e.message || e) };
+  } finally {
+    await chrome.debugger.detach(target).catch(() => {});
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, send) => {
   if (sender.id !== chrome.runtime.id || !msg) return false;
   if (msg.type === 'nbx-search' && typeof msg.query === 'string' && msg.query.trim()) {
     searchBlog(msg.query).then(send, (e) => send({ ok: false, error: String((e && e.message) || e) }));
+    return true;
+  }
+  if (msg.type === 'nbx-trusted-enter' && sender.tab && sender.tab.id) {
+    trustedEnter(sender.tab.id).then(send, (e) => send({ ok: false, error: String(e) }));
     return true;
   }
   if (msg.type === 'nbx-check-update') {

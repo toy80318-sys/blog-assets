@@ -165,6 +165,7 @@ function renderGeneral() {
   $('#showBar').checked = S.showBar;
   $('#showPopup').checked = S.showPopup;
   $('#showPanel').checked = S.showPanel;
+  $('#trustedEnter').checked = !!S.trustedEnter;
   $('#tipsUrl').value = S.tipsUrl || '';
   document.querySelectorAll('input[name="barMode"]').forEach((r) => (r.checked = r.value === S.barMode));
   document.querySelectorAll('.extra').forEach((c) => (c.checked = (S.popupExtras || []).includes(c.value)));
@@ -195,6 +196,16 @@ $('#q2style').addEventListener('change', (e) => { S.quote2Style = e.target.value
 $('#showBar').addEventListener('change', (e) => { S.showBar = e.target.checked; save(); });
 $('#showPopup').addEventListener('change', (e) => { S.showPopup = e.target.checked; save(); });
 $('#showPanel').addEventListener('change', (e) => { S.showPanel = e.target.checked; save(); });
+$('#trustedEnter').addEventListener('change', async (e) => {
+  if (e.target.checked) {
+    // 디버거 권한이 없을 때만(예: 웹스토어 판에서 선택 권한으로 바뀐 경우) 요청합니다
+    let ok = true;
+    try { ok = await chrome.permissions.contains({ permissions: ['debugger'] }) || await chrome.permissions.request({ permissions: ['debugger'] }); } catch (_) {}
+    if (!ok) { e.target.checked = false; return; }
+  }
+  S.trustedEnter = e.target.checked;
+  save();
+});
 $('#tipsUrl').addEventListener('input', (e) => {
   const v = e.target.value.trim();
   e.target.style.borderColor = !v || /^https?:\/\/\S+$/i.test(v) ? '' : '#d32f2f';

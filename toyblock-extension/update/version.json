@@ -1,8 +1,8 @@
 {
   "name": "토이블록 네이버 블로그 도우미",
-  "version": "1.5.0",
-  "released_at": "2026-10-27T18:48:29Z",
-  "notes": "· 온라인 업데이트 알림: 새 버전이 나오면 확장 아이콘에 N이 표시됩니다\n· Ctrl+Shift+1이 '엔터+소제목'으로 바뀌었습니다\n· 블로그 점수 가이드에 쿠팡 배너가 들어갔습니다",
+  "version": "1.5.1",
+  "released_at": "2026-10-27T19:03:03Z",
+  "notes": "· Ctrl+Shift+1(엔터+소제목)이 실제 네이버 에디터에서 새 줄을 만들지 못하던 문제를 고쳤습니다\n· '확실한 엔터 모드'(기본 켜짐): 실제 키보드와 같은 엔터를 넣습니다. 누르는 순간 '디버깅을 시작함' 줄이 잠깐 보입니다\n· 엔터가 들어가지 않으면 소제목도 바꾸지 않고 알림으로 알려 줍니다",
   "download_url": "https://github.com/toy80318-sys/blog-assets/raw/main/toyblock-extension/dist/toyblock-naver-blog-helper.zip",
   "guide_url": "https://github.com/toy80318-sys/blog-assets/blob/main/toyblock-extension/README.md#업데이트-방법"
 }

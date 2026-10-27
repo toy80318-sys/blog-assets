@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "토이블록 네이버 블로그 도우미",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "토이블록 네이버 블로그 도우미 — 소제목·인용구 서식 단축키와 블로그 채널·포스트 분석, 검색 노출 확인.",
   "permissions": [
     "storage",
-    "alarms"
+    "alarms",
+    "debugger"
   ],
   "host_permissions": [
     "https://blog.naver.com/*",
