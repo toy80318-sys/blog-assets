@@ -15,7 +15,8 @@
   const EXPO_MAX = 30;
 
   let settings = NBX.merge(null);
-  const S = { open: false, tab: 'channel', blogId: null, channel: null, chLoading: false, chError: '', post: null, expo: null, expoRun: null, postExpo: null };
+  const S = { open: false, tab: 'channel', blogId: null, channel: null, chLoading: false, chError: '', post: null, expo: null, expoRun: null, postExpo: null,
+    cmt: { mode: 'buddy', buddy: { items: [], page: 0, loading: false, error: '', more: true }, search: { q: '', items: [], loading: false, error: '', done: false }, marks: {}, stats: null, started: false } };
 
   // ───────────── 유틸 ─────────────
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -352,7 +353,7 @@
   function pill() {
     const info = (S.channel && S.channel.info) || S.pillInfo;
     const today = info ? `<span class="today">오늘 ${comma(info.dayVisitorCount)}</span>` : '';
-    return `<button class="pill ${S.open ? 'on' : ''}" data-act="toggle" title="토이블록 블로그 분석">
+    return `<button class="pill ${S.open ? 'on' : ''}" data-act="toggle" title="토이블록 블로그 분석 · 끌어서 원하는 곳으로 옮길 수 있어요">
       <span class="logo">T</span><span class="pname">블로그 분석</span>${today}<span class="chev">${S.open ? '▴' : '▾'}</span></button>`;
   }
 
@@ -452,6 +453,8 @@
       <div class="bar"><i style="width:${sm.score || 0}%"></i></div>
       <div class="kv">최근 글 ${sm.judged}개 중 <b class="acc">${sm.visible}개</b>가 검색에 잘 보여요</div>
       <div class="stack">${seg}</div><div class="legend">${legend}</div>
+      ${sm.c.miss || sm.c.warn ? `<div class="tipline"><b>${[sm.c.miss && `누락 ${sm.c.miss}편`, sm.c.warn && `주의 ${sm.c.warn}편`].filter(Boolean).join(' · ')}</b>이 있어요. 아래 "글별 결과 보기"에서 어떤 글인지 확인하고, 원인별로 고치는 방법을 따라 해 보세요.</div>
+      <button class="btn primary" data-act="tips" data-hash="missing">누락·주의 글 살리는 법 보기 →</button>` : ''}
       ${sm.c.off ? `<div class="note warnc">검색 비허용으로 설정된 글 ${sm.c.off}편은 지수에서 뺐습니다.</div>` : ''}
       ${sm.c.err ? `<div class="note">확인하지 못한 글 ${sm.c.err}편은 다시 확인하면 채워집니다.</div>` : ''}
       <details><summary>글별 결과 보기</summary><ol class="list xs">`;
@@ -532,10 +535,110 @@
       const e = S.postExpo && S.postExpo.logNo === p.logNo ? S.postExpo : null;
       let r = '';
       if (e && e.loading) r = '<div class="note">검색 중…</div>';
-      else if (e) { const st = STATUS[e.status] || STATUS.err; r = `<div class="kv"><i class="dot" style="background:${st.color}"></i> ${e.rank ? `블로그 검색 <b>${e.rank}위</b> · ${st.label}` : st.label}</div>`; }
+      else if (e) {
+        const st = STATUS[e.status] || STATUS.err;
+        r = `<div class="kv"><i class="dot" style="background:${st.color}"></i> ${e.rank ? `블로그 검색 <b>${e.rank}위</b> · ${st.label}` : st.label}</div>`;
+        if (e.status === 'miss' || e.status === 'warn') r += `<button class="btn ghost" data-act="tips" data-hash="missing">${st.label} 글 살리는 법 보기 →</button>`;
+      }
       h += `<div class="sec"><div class="sh"><b>이 글 검색 노출</b></div>${r}<button class="btn ghost" data-act="postExpo">${e && !e.loading ? '다시 확인' : '제목으로 노출 확인'}</button></div>`;
     }
     h += `<button class="btn primary" data-act="repost">↻ 다시 분석</button>`;
+    return h;
+  }
+
+  // ───────────── 이웃 소통 ─────────────
+  const keyOf = (it) => it.blogId.toLowerCase() + '/' + it.logNo;
+  const ago = (t) => { if (!t) return ''; const m = Math.floor((Date.now() - t) / 60000); return m < 1 ? '방금' : m < 60 ? m + '분 전' : m < 1440 ? Math.floor(m / 60) + '시간 전' : Math.floor(m / 1440) + '일 전'; };
+  function currentLogNo() {
+    const m = location.pathname.match(/^\/[A-Za-z0-9_-]{2,40}\/(\d{6,20})/);
+    if (m) return m[1];
+    const fd = frameDoc();
+    try { if (fd) { const u = new URL(fd.location.href); const n = u.searchParams.get('logNo'); if (n) return n; } } catch (_) {}
+    try { const n = new URL(location.href).searchParams.get('logNo'); if (n) return n; } catch (_) {}
+    return null;
+  }
+  async function refreshMarks() {
+    const C = S.cmt;
+    const keys = [...C.buddy.items, ...C.search.items].map(keyOf);
+    const r = await chrome.runtime.sendMessage({ type: 'nbx-cmt-log', keys }).catch(() => null);
+    if (r) { C.marks = r.marks || {}; C.stats = r.stats || null; }
+    if (S.tab === 'cmt') render();
+  }
+  async function loadBuddy(more) {
+    const B = S.cmt.buddy;
+    if (B.loading) return;
+    B.loading = true; B.error = ''; render();
+    const page = more ? B.page + 1 : 1;
+    const r = await chrome.runtime.sendMessage({ type: 'nbx-cmt-buddy', page }).catch(() => null);
+    B.loading = false;
+    if (r && r.ok) {
+      const seen = new Set(more ? B.items.map(keyOf) : []);
+      const add = r.items.filter((x) => !seen.has(keyOf(x)));
+      B.items = more ? B.items.concat(add) : add;
+      B.page = page; B.more = r.items.length >= 5;
+    } else if (more && r && r.error === 'empty') B.more = false;
+    else B.error = r && r.error === 'login' ? 'login' : 'fail';
+    render();
+    refreshMarks();
+  }
+  async function runSearch() {
+    const Q = S.cmt.search;
+    const q = Q.q.trim();
+    if (!q || Q.loading) return;
+    Q.loading = true; Q.error = ''; render();
+    const r = await chrome.runtime.sendMessage({ type: 'nbx-cmt-search', q }).catch(() => null);
+    Q.loading = false; Q.done = true;
+    if (r && r.ok) Q.items = r.items; else { Q.items = []; Q.error = 'fail'; }
+    render();
+    refreshMarks();
+  }
+  function openItem(list, i, relation) {
+    const it = list[i];
+    if (!it) return;
+    const nx = list[i + 1];
+    S.cmt.marks[keyOf(it)] = { ...(S.cmt.marks[keyOf(it)] || {}), o: Date.now() };
+    chrome.runtime.sendMessage({ type: 'nbx-cmt-open', blogId: it.blogId, logNo: it.logNo, title: it.title, nick: it.nick, relation,
+      next: nx ? { blogId: nx.blogId, logNo: nx.logNo, title: nx.title, nick: nx.nick, relation } : null }).catch(() => {});
+    render();
+  }
+  function itemList(list, src) {
+    if (!list.length) return '';
+    return `<ol class="clist">${list.map((it, i) => {
+      const mk = S.cmt.marks[keyOf(it)] || {};
+      const st = mk.p ? '<span class="cs done">✓ 댓글</span>' : mk.o ? '<span class="cs">열어봄</span>' : '';
+      const sub = [it.nick || it.blogName || it.blogId, it.at ? ago(it.at) : ''].filter(Boolean).map(esc).join(' · ');
+      return `<li class="ci ${mk.p ? 'dim' : ''}" data-act="cmtOpen" data-src="${src}" data-i="${i}" title="새 탭에서 댓글창으로 이동하고 댓글을 복사합니다">
+        <div class="ct">${esc(it.title || '(제목 없음)')}</div><div class="cm"><span>${sub}</span>${st}<b class="go">💬</b></div></li>`;
+    }).join('')}</ol>`;
+  }
+  function cmtView() {
+    const C = S.cmt;
+    const prov = settings.cmt.provider;
+    const pl = prov === 'template' ? '템플릿' : NBX.AI_PROVIDERS[prov].label;
+    const st = C.stats;
+    let h = `<div class="cstat"><span>오늘 댓글 <b>${st ? st.today : 0}</b>개${st && st.last ? ' · 마지막 ' + ago(st.last) : ''}</span><button class="lnk" data-act="settings">${esc(pl)} ⚙</button></div>`;
+    if (currentLogNo()) h += `<button class="btn primary" data-act="cmtHere">💬 지금 보는 글에 댓글 만들기</button>`;
+    h += `<div class="seg"><button class="${C.mode === 'buddy' ? 'on' : ''}" data-act="cmtMode" data-mode="buddy">이웃 새 글</button><button class="${C.mode === 'search' ? 'on' : ''}" data-act="cmtMode" data-mode="search">키워드 노출 글</button></div>`;
+    if (C.mode === 'buddy') {
+      const B = C.buddy;
+      if (B.error && !B.items.length) {
+        h += `<div class="empty">${B.error === 'login' ? '네이버에 로그인한 뒤 다시 시도해 주세요.' : '이웃 새 글을 불러오지 못했어요.'}
+          <button class="btn ghost" data-act="cmtReload">다시 시도</button>
+          <button class="btn ghost" data-act="cmtSection">네이버 이웃새글 화면 열기</button>
+          <div class="note">이웃새글 화면의 글 옆 <b>💬 댓글</b> 버튼으로도 똑같이 쓸 수 있어요.</div></div>`;
+      } else if (!B.items.length) h += `<div class="empty">${B.loading ? '이웃 새 글을 불러오는 중…' : '이웃 새 글이 없어요.'}</div>`;
+      else {
+        h += itemList(B.items, 'buddy');
+        if (B.more) h += `<button class="btn ghost" data-act="cmtMore">${B.loading ? '불러오는 중…' : '더 보기'}</button>`;
+      }
+    } else {
+      const Q = C.search;
+      h += `<div class="qrow"><input class="q" type="search" placeholder="키워드 (예: 장마철 우산 보관)" value="${esc(Q.q)}" maxlength="60"><button data-act="cmtSearch">${Q.loading ? '…' : '검색'}</button></div>`;
+      if (Q.error) h += `<div class="empty">검색 결과를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</div>`;
+      else if (Q.done && !Q.items.length && !Q.loading) h += `<div class="empty">검색된 블로그 글이 없어요.</div>`;
+      else h += itemList(Q.items, 'search');
+    }
+    h += `<div class="note">글을 누르면 새 탭으로 이동해 댓글창이 열리고, 그 글에 맞춘 댓글이 복사돼요. 댓글창에 붙여 넣고 고친 뒤 등록은 직접 눌러 주세요.</div>`;
     return h;
   }
 
@@ -546,32 +649,94 @@
 
   function render() {
     if (!settings.showPanel || !S.blogId) { hostEl.remove(); return; }
+    if (S.composing) { S.renderLater = true; return; } // 한글 입력 중에는 다시 그리지 않습니다
     if (!hostEl.isConnected) (document.body || document.documentElement).appendChild(hostEl);
     const body = !S.open ? '' : `<div class="card">
-      <div class="tabs"><button class="${S.tab === 'channel' ? 'on' : ''}" data-tab="channel">채널 분석</button><button class="${S.tab === 'post' ? 'on' : ''}" data-tab="post">포스트 분석</button></div>
-      <div class="brand"><span>TOYBLOCK</span><button class="x" data-act="settings" title="설정">⚙</button><button class="x" data-act="toggle" title="접기">✕</button></div>
-      <div class="body">${S.tab === 'channel' ? channelView() : postView()}${partnerBanner()}</div></div>`;
+      <div class="tabs"><button class="${S.tab === 'channel' ? 'on' : ''}" data-tab="channel">채널 분석</button><button class="${S.tab === 'post' ? 'on' : ''}" data-tab="post">포스트 분석</button><button class="${S.tab === 'cmt' ? 'on' : ''}" data-tab="cmt">이웃 소통</button></div>
+      <div class="brand" title="끌어서 옮기기 · 두 번 누르면 처음 위치로"><span><i class="grip">⠿</i>TOYBLOCK</span><button class="x" data-act="settings" title="설정">⚙</button><button class="x" data-act="toggle" title="접기">✕</button></div>
+      <div class="body">${S.tab === 'channel' ? channelView() : S.tab === 'post' ? postView() : cmtView()}${partnerBanner()}</div></div>`;
     const keepScroll = root.querySelector('.body') ? root.querySelector('.body').scrollTop : 0;
+    const qFocus = root.activeElement && root.activeElement.classList.contains('q');
     const openDetails = !!root.querySelector('details[open]');
     wrap.innerHTML = pill() + body;
     const b = root.querySelector('.body');
     if (b) b.scrollTop = keepScroll;
     if (openDetails) { const dd = root.querySelector('details'); if (dd) dd.open = true; }
+    if (qFocus) { const qi = root.querySelector('.q'); if (qi) { qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); } }
+    applyPos();
   }
+
+  // ───────────── 위치 옮기기(작은 상태·펼친 상태 모두) ─────────────
+  // 작은 버튼이나 펼친 창의 TOYBLOCK 줄을 끌면 통째로 옮겨지고, 위치는 기억됩니다. 두 번 누르면 처음 위치로.
+  const POS_KEY = 'nbxPanelPos';
+  let pos = null;
+  function applyPos() {
+    const pillEl = root.querySelector('.pill');
+    if (!pillEl) return;
+    const vw = document.documentElement.clientWidth || innerWidth, vh = innerHeight;
+    const pw = pillEl.offsetWidth || 180, ph = pillEl.offsetHeight || 38;
+    const x = Math.max(4, Math.min(vw - pw - 4, pos ? pos.x : 14));
+    const y = Math.max(4, Math.min(vh - ph - 4, pos ? pos.y : 150));
+    // 오른쪽 공간이 좁으면 창을 왼쪽으로, 아래 공간이 좁으면 위로 펼칩니다
+    const right = x + 300 > vw - 8;
+    const below = vh - (y + ph) - 16, above = y - 16;
+    const up = below < 320 && above > below;
+    wrap.classList.toggle('right', right);
+    wrap.classList.toggle('up', up);
+    if (right) { wrap.style.left = 'auto'; wrap.style.right = (vw - x - pw) + 'px'; } else { wrap.style.right = 'auto'; wrap.style.left = x + 'px'; }
+    if (up) { wrap.style.top = 'auto'; wrap.style.bottom = (vh - y - ph) + 'px'; } else { wrap.style.bottom = 'auto'; wrap.style.top = y + 'px'; }
+    const card = root.querySelector('.card');
+    if (card) card.style.maxHeight = Math.max(200, (up ? above : below) - 8) + 'px';
+  }
+  let drag = null;
+  wrap.addEventListener('pointerdown', (e) => {
+    S.dragClick = false; // 새로 누르면 앞선 끌기의 클릭 무시는 끝
+    const h = e.target.closest('.pill, .brand');
+    if (!h || e.button !== 0 || (h.classList.contains('brand') && e.target.closest('button'))) return;
+    const r = root.querySelector('.pill').getBoundingClientRect();
+    drag = { sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top, moved: false, id: e.pointerId };
+  });
+  wrap.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 5) return;
+    if (!drag.moved) {
+      // 실제로 끌기 시작할 때 포인터를 붙잡아, 블로그 본문(프레임) 위를 지나가도 계속 따라오게 합니다
+      // (누르자마자 붙잡으면 버튼 클릭이 열기/접기로 전달되지 않습니다)
+      try { wrap.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+    drag.moved = true;
+    wrap.classList.add('dragging');
+    pos = { x: Math.round(drag.ox + dx), y: Math.round(drag.oy + dy) };
+    applyPos();
+  });
+  const endDrag = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (drag.moved) { S.dragClick = true; setTimeout(() => (S.dragClick = false), 600); store.set(POS_KEY, pos); }
+    wrap.classList.remove('dragging');
+    try { wrap.releasePointerCapture(e.pointerId); } catch (_) {}
+    drag = null;
+  };
+  wrap.addEventListener('pointerup', endDrag);
+  wrap.addEventListener('pointercancel', endDrag);
+  // 끌기를 마친 직후의 클릭은 열기/접기로 처리하지 않습니다
+  root.addEventListener('click', (e) => { if (S.dragClick) { S.dragClick = false; e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+  root.addEventListener('dblclick', (e) => { if (e.target.closest('.brand') && !e.target.closest('button')) { pos = null; store.set(POS_KEY, null); applyPos(); } });
+  window.addEventListener('resize', () => applyPos());
 
   root.addEventListener('click', (e) => {
     const t = e.target.closest('[data-act], [data-tab]');
     if (!t) return;
     if (t.dataset.tab) {
       S.tab = t.dataset.tab;
-      if (S.tab === 'post') refreshPost(); else { render(); loadChannel(); }
+      if (S.tab === 'post') refreshPost(); else if (S.tab === 'cmt') openCmt(); else { render(); loadChannel(); }
       return;
     }
     const act = t.dataset.act;
     if (act === 'toggle') {
       S.open = !S.open;
       render();
-      if (S.open) { if (S.tab === 'post') refreshPost(); else loadChannel(); }
+      if (S.open) { if (S.tab === 'post') refreshPost(); else if (S.tab === 'cmt') openCmt(); else loadChannel(); }
     } else if (act === 'reload') loadChannel(true);
     else if (act === 'expo') runExposure();
     else if (act === 'stopExpo') { if (S.expoRun) S.expoRun.stop = true; }
@@ -579,7 +744,29 @@
     else if (act === 'postExpo') runPostExposure();
     else if (act === 'settings') chrome.runtime.sendMessage({ type: 'nbx-open-options' }).catch(() => {});
     else if (act === 'tips') chrome.runtime.sendMessage({ type: 'nbx-open-tips', hash: t.dataset.hash || '' }).catch(() => {});
+    else if (act === 'cmtMode') { S.cmt.mode = t.dataset.mode; render(); if (S.cmt.mode === 'search') { const qi = root.querySelector('.q'); if (qi) qi.focus(); } }
+    else if (act === 'cmtReload') loadBuddy(false);
+    else if (act === 'cmtMore') loadBuddy(true);
+    else if (act === 'cmtSearch') { const qi = root.querySelector('.q'); if (qi) S.cmt.search.q = qi.value; runSearch(); }
+    else if (act === 'cmtOpen') openItem(t.dataset.src === 'search' ? S.cmt.search.items : S.cmt.buddy.items, Number(t.dataset.i), t.dataset.src === 'search' ? 'other' : 'buddy');
+    else if (act === 'cmtHere') chrome.runtime.sendMessage({ type: 'nbx-cmt-here' }).catch(() => {});
+    else if (act === 'cmtSection') window.open('https://section.blog.naver.com/BlogHome.naver?directoryNo=0&currentPage=1&groupId=0', '_blank', 'noopener');
   });
+  root.addEventListener('input', (e) => { if (e.target.classList && e.target.classList.contains('q')) S.cmt.search.q = e.target.value; });
+  root.addEventListener('compositionstart', () => { S.composing = true; });
+  root.addEventListener('compositionend', () => { S.composing = false; if (S.renderLater) { S.renderLater = false; setTimeout(render, 0); } });
+  root.addEventListener('keydown', (e) => {
+    if (e.target.classList && e.target.classList.contains('q')) {
+      e.stopPropagation();
+      if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); S.cmt.search.q = e.target.value; runSearch(); }
+    }
+  });
+  function openCmt() {
+    render();
+    if (!S.cmt.started) { S.cmt.started = true; loadBuddy(false); } else refreshMarks();
+  }
+  // 댓글을 달고 이 탭으로 돌아오면 표시를 새로 고칩니다
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.open && S.tab === 'cmt') refreshMarks(); });
 
   // 블로그 안에서 다른 글로 이동하면(안쪽 프레임 이동) 포스트 분석을 새로 합니다
   function watchFrame() {
@@ -606,6 +793,8 @@
     try { settings = NBX.merge((await chrome.storage.sync.get('nbx')).nbx); } catch (_) {}
     try { NBX.applyRemote((await chrome.storage.local.get('nbxRemote')).nbxRemote); } catch (_) {}
     S.blogId = currentBlogId();
+    const saved = await store.get(POS_KEY);
+    if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) pos = { x: saved.x, y: saved.y };
     render();
     watchFrame();
     // 접힌 상태에서도 오늘 방문자 수를 보여 주도록 기본 정보만 가볍게 불러옵니다
@@ -622,6 +811,7 @@
   }
 
   chrome.storage.onChanged.addListener((c, area) => {
+    if (area === 'local' && c[POS_KEY] && !drag) { const v = c[POS_KEY].newValue; pos = v && Number.isFinite(v.x) ? { x: v.x, y: v.y } : null; applyPos(); }
     if (area === 'sync' && c.nbx) { settings = NBX.merge(c.nbx.newValue); render(); }
   });
 
@@ -631,10 +821,20 @@
     return `
 :host{all:initial}
 *{box-sizing:border-box}
-.wrap{position:fixed;left:14px;top:150px;z-index:2147482000;font:13px/1.45 -apple-system,"Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#1f2328;-webkit-font-smoothing:antialiased}
+.wrap{position:fixed;left:14px;top:150px;z-index:2147482000;display:flex;flex-direction:column;align-items:flex-start;font:13px/1.45 -apple-system,"Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#1f2328;-webkit-font-smoothing:antialiased}
 button{font:inherit;cursor:pointer}
 .pill{display:flex;align-items:center;gap:7px;height:38px;padding:0 12px 0 6px;border:1px solid #dfe3e8;border-radius:19px;background:#fff;box-shadow:0 4px 14px rgba(20,30,50,.12);color:#1f2328}
 .pill:hover,.pill.on{border-color:#03a94d}
+.pill,.brand{user-select:none;-webkit-user-select:none;touch-action:none}
+.brand{cursor:move}
+.grip{font-style:normal;color:#9ad8b5;margin-right:6px;letter-spacing:0}
+.wrap.up{flex-direction:column-reverse}
+.wrap.up .card{margin-top:0;margin-bottom:8px}
+.wrap.right{align-items:flex-end}
+.wrap.right .flash{left:auto;right:0}
+.wrap.up .flash{top:auto;bottom:44px}
+.wrap.dragging .pill,.wrap.dragging .card{box-shadow:0 14px 34px rgba(20,30,50,.28)}
+.wrap.dragging *{cursor:move!important}
 .logo{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#03a94d;color:#fff;font-weight:800;font-size:13px}
 .pname{font-weight:700}
 .today{font-size:12px;color:#03a94d;font-weight:700;background:#e9f8ef;border-radius:10px;padding:1px 7px}
@@ -719,6 +919,26 @@ details{margin-top:8px}summary{cursor:pointer;font-size:12px;color:#027a38;font-
 .partner{display:block;margin-top:12px;padding:10px 12px;border-radius:11px;text-decoration:none;background:linear-gradient(120deg,#fff7ec,#ffeeda);border:1px solid #f6d7b0;color:#3b2a14}
 .partner b{display:block;font-size:12.5px}.partner span{font-size:11px;color:#8a6a3f}.partner:hover{border-color:#e8a256}
 .disc{font-size:10px;color:#9aa3ae;margin:5px 2px 0;line-height:1.4}
+.tabs button{font-size:12.5px}
+.cstat{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#3d4550;background:#fff;border:1px solid #e8ebef;border-radius:10px;padding:6px 9px;margin:2px 0 8px}
+.cstat b{color:#027a38}
+.lnk{border:0;background:none;color:#027a38;font-weight:700;font-size:11.5px;padding:0}
+.seg{display:flex;background:#e9edf1;border-radius:10px;padding:3px;margin:8px 0}
+.seg button{flex:1;border:0;background:none;border-radius:8px;padding:6px 0;font-weight:700;color:#6b7280;font-size:12.5px}
+.seg button.on{background:#fff;color:#027a38;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.qrow{display:flex;gap:6px;margin-bottom:8px}
+.qrow input{flex:1;min-width:0;border:1px solid #cfd4da;border-radius:9px;padding:7px 9px;font:inherit;font-size:12.5px;background:#fff;color:#1f2328}
+.qrow input:focus{outline:2px solid #b9e6cc;border-color:#03a94d}
+.qrow button{border:0;background:#03a94d;color:#fff;border-radius:9px;padding:0 12px;font-weight:700}
+.clist{list-style:none;margin:0;padding:0}
+.ci{background:#fff;border:1px solid #e8ebef;border-radius:10px;padding:7px 9px;margin-bottom:6px;cursor:pointer}
+.ci:hover{border-color:#03a94d;background:#f6fcf8}
+.ci.dim{opacity:.6}
+.ct{font-size:12.5px;font-weight:700;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cm{display:flex;align-items:center;gap:6px;font-size:11px;color:#8a94a3;margin-top:2px}
+.cm span:first-child{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cs{color:#6b7280;background:#f0f2f5;border-radius:6px;padding:0 5px;white-space:nowrap}.cs.done{color:#027a38;background:#e9f8ef;font-weight:700}
+.go{font-size:12px}
 .flash{position:absolute;left:0;top:44px;width:300px;background:#333;color:#fff;border-radius:10px;padding:9px 12px;font-size:12px;box-shadow:0 6px 16px rgba(0,0,0,.2)}
 `;
   }

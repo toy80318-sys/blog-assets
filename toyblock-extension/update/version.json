@@ -1,8 +1,8 @@
 {
   "name": "토이블록 네이버 블로그 도우미",
-  "version": "1.5.1",
-  "released_at": "2026-10-27T19:03:03Z",
-  "notes": "· Ctrl+Shift+1(엔터+소제목)이 실제 네이버 에디터에서 새 줄을 만들지 못하던 문제를 고쳤습니다\n· '확실한 엔터 모드'(기본 켜짐): 실제 키보드와 같은 엔터를 넣습니다. 누르는 순간 '디버깅을 시작함' 줄이 잠깐 보입니다\n· 엔터가 들어가지 않으면 소제목도 바꾸지 않고 알림으로 알려 줍니다",
+  "version": "1.6.0",
+  "released_at": "2026-10-27T20:29:40Z",
+  "notes": "· 이웃 소통 댓글 도우미: 이웃 새 글·키워드 노출 글을 누르면 새 탭에서 댓글창으로 이동하고, 그 글에 맞춘 댓글이 복사돼 있어요\n· 제미나이(기본)·클로드·GPT로 글을 읽고 댓글 초안 3개를 만들어요. 키가 없으면 템플릿 150종으로 조합해요\n· 네이버 검색·이웃새글 화면의 글 옆에 💬 댓글 버튼\n· 블로그 분석 창을 끌어서 원하는 곳으로 옮길 수 있어요(작은 상태·펼친 상태 모두)\n· 블로그 점수 가이드에 '누락·주의 글 살리는 법'을 자세히 넣었어요",
   "download_url": "https://github.com/toy80318-sys/blog-assets/raw/main/toyblock-extension/dist/toyblock-naver-blog-helper.zip",
   "guide_url": "https://github.com/toy80318-sys/blog-assets/blob/main/toyblock-extension/README.md#업데이트-방법"
 }

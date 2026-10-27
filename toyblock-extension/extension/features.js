@@ -1,5 +1,6 @@
 // 공통 기능 정의 — 옵션 페이지, 팝업, 콘텐츠 스크립트가 함께 사용합니다.
 (function (g) {
+  if (g.NBX) return; // 같은 페이지에 두 번 들어와도 한 번만 정의합니다
   const FEATURES = [
     { id: 'none',         label: '사용 안 함',     desc: '이 단축키를 사용하지 않습니다' },
     { id: 'enterSectionTitle', label: '엔터+소제목', desc: '엔터로 새 줄을 만든 뒤 그 줄을 소제목으로 설정합니다', styleable: true },
@@ -53,8 +54,27 @@
     showPanel: true,
     trustedEnter: true, // 확실한 엔터 모드(크롬 디버거로 실제 키보드와 같은 엔터) — 설정에서 끌 수 있습니다
     tipsUrl: '', // 블로그 점수 팁 페이지 주소(아임웹 등). 비어 있으면 확장에 들어 있는 페이지를 엽니다
-    popupExtras: ['colorRed', 'colorBlue']
+    popupExtras: ['colorRed', 'colorBlue'],
+    // 이웃 소통 · 댓글 도우미
+    cmt: {
+      provider: 'gemini', // gemini | claude | openai | template(키 없이 템플릿만)
+      models: { gemini: '', claude: '', openai: '' }, // 비어 있으면 기본 모델
+      callName: true,   // 블로거 닉네임을 "○○님"으로 부르기
+      prefill: false,   // 복사와 함께 댓글 입력칸에 바로 채우기
+      prefetch: false,  // 목록의 다음 글 댓글을 미리 만들어 두기
+      style: '',        // 말투 등 추가 요청
+      linkButtons: true // 네이버 검색·이웃새글 화면에 💬 댓글 버튼
+    }
   };
+
+  // 댓글 초안을 만드는 AI — 키는 사용자 크롬(chrome.storage.local)에만 저장합니다
+  const AI_PROVIDERS = {
+    gemini: { label: '제미나이', model: 'gemini-3.5-flash-lite', origin: 'https://generativelanguage.googleapis.com/*', keyUrl: 'https://aistudio.google.com/apikey', keyHint: 'Google AI Studio에서 무료로 받을 수 있습니다' },
+    claude: { label: '클로드', model: 'claude-haiku-5-5', origin: 'https://api.anthropic.com/*', keyUrl: 'https://platform.claude.com/docs/ko/get-api-key', keyHint: 'Claude Console의 Settings → API keys에서 만듭니다' },
+    openai: { label: 'GPT', model: 'gpt-5-mini', origin: 'https://api.openai.com/*', keyUrl: 'https://platform.openai.com/api-keys', keyHint: 'OpenAI 플랫폼의 API keys에서 만듭니다' }
+  };
+  const PROVIDER_IDS = ['gemini', 'claude', 'openai', 'template'];
+  const MODEL_RE = /^[A-Za-z0-9._:\-]{2,80}$/;
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
@@ -80,6 +100,17 @@
     if (typeof out.tipsUrl !== 'string') out.tipsUrl = '';
     out.trustedEnter = out.trustedEnter !== false;
     out.popupExtras = Array.isArray(out.popupExtras) ? out.popupExtras.filter((id) => byId[id]) : d.popupExtras;
+    const c = saved.cmt && typeof saved.cmt === 'object' ? saved.cmt : {};
+    const models = c.models && typeof c.models === 'object' ? c.models : {};
+    out.cmt = {
+      provider: PROVIDER_IDS.includes(c.provider) ? c.provider : d.cmt.provider,
+      models: Object.fromEntries(Object.keys(d.cmt.models).map((k) => [k, typeof models[k] === 'string' && MODEL_RE.test(models[k].trim()) ? models[k].trim() : ''])),
+      callName: c.callName !== false,
+      prefill: c.prefill === true,
+      prefetch: c.prefetch === true,
+      style: typeof c.style === 'string' ? c.style.slice(0, 300) : '',
+      linkButtons: c.linkButtons !== false
+    };
     return out;
   }
 
@@ -116,5 +147,7 @@
     if (remote.partner && typeof remote.partner.url === 'string' && /^https:\/\/link\.coupang\.com\/[A-Za-z0-9/_\-]+$/.test(remote.partner.url)) PARTNER.url = remote.partner.url;
   }
 
-  g.NBX = { PARTNER, applyRemote, remoteSelectors, FEATURES, QUOTE_STYLES, FONTS, SIZES, SLOT_COUNT, DEFAULTS, merge, clone, keyLabel, byId, emptyStyle, defaultKey };
+  const modelOf = (cmt, p) => (cmt && cmt.models && cmt.models[p]) || (AI_PROVIDERS[p] && AI_PROVIDERS[p].model) || '';
+
+  g.NBX = { AI_PROVIDERS, PROVIDER_IDS, MODEL_RE, modelOf, PARTNER, applyRemote, remoteSelectors, FEATURES, QUOTE_STYLES, FONTS, SIZES, SLOT_COUNT, DEFAULTS, merge, clone, keyLabel, byId, emptyStyle, defaultKey };
 })(globalThis);

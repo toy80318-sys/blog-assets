@@ -1,17 +1,24 @@
 {
   "manifest_version": 3,
   "name": "토이블록 네이버 블로그 도우미",
-  "version": "1.5.1",
-  "description": "토이블록 네이버 블로그 도우미 — 소제목·인용구 서식 단축키와 블로그 채널·포스트 분석, 검색 노출 확인.",
+  "version": "1.6.0",
+  "description": "토이블록 네이버 블로그 도우미 — 소제목·인용구 서식 단축키, 블로그 채널·포스트 분석과 검색 노출 확인, 이웃 소통 댓글 도우미.",
   "permissions": [
     "storage",
     "alarms",
-    "debugger"
+    "debugger",
+    "offscreen",
+    "clipboardWrite"
   ],
   "host_permissions": [
     "https://blog.naver.com/*",
     "https://*.blog.naver.com/*",
     "https://search.naver.com/*"
+  ],
+  "optional_host_permissions": [
+    "https://generativelanguage.googleapis.com/*",
+    "https://api.anthropic.com/*",
+    "https://api.openai.com/*"
   ],
   "action": {
     "default_title": "토이블록 네이버 블로그 도우미",
@@ -55,6 +62,19 @@
         "panel.js"
       ],
       "all_frames": false,
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://blog.naver.com/*",
+        "https://*.blog.naver.com/*",
+        "https://search.naver.com/*"
+      ],
+      "js": [
+        "features.js",
+        "comment.js"
+      ],
+      "all_frames": true,
       "run_at": "document_idle"
     }
   ],

@@ -1,4 +1,5 @@
 // 토이블록 네이버 블로그 도우미 — 백그라운드
+importScripts('features.js', 'comment-core.js', 'keystore.js');
 // 검색 노출 확인: 글 제목으로 네이버 블로그 검색을 한 번 하고, 결과에 나온 글 순서(블로그ID/글번호)만 돌려줍니다.
 const SEARCH_URL = 'https://search.naver.com/search.naver?ssc=tab.blog.all&sm=tab_jum&query=';
 
@@ -146,4 +147,458 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
     return false;
   }
   return false;
+});
+
+// ───────────── 이웃 소통 · 댓글 도우미 ─────────────
+// 목록에서 글을 누르면 새 탭으로 이동해 댓글창을 열고, 그 글에 맞춘 댓글 초안을 만들어 클립보드에 복사합니다.
+// 등록 버튼은 항상 사용자가 직접 누릅니다(확장이 댓글을 대신 등록하지 않습니다).
+const ID_RE = /^[A-Za-z0-9_-]{2,40}$/;
+const NO_RE = /^\d{6,20}$/;
+const CMT_JOB_TTL = 10 * 60e3;
+const CACHE_TTL = 30 * 60e3;
+const AI_TIMEOUT = 20e3;
+const cleanStr = (v, n) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, n) : '');
+const postKeyOf = (blogId, logNo) => (ID_RE.test(blogId || '') && NO_RE.test(String(logNo || '')) ? blogId.toLowerCase() + '/' + logNo : '');
+
+async function getSettings() {
+  try { return NBX.merge((await chrome.storage.sync.get('nbx')).nbx); } catch (_) { return NBX.merge(null); }
+}
+async function getKeys() {
+  try { return await NBXKeys.getAll(); } catch (_) { return {}; }
+}
+
+// 작업(탭별): 서비스 워커가 다시 시작돼도 이어지도록 세션 저장소에 둡니다
+let jobsP = null;
+function loadJobs() {
+  if (!jobsP) jobsP = chrome.storage.session.get('nbxCmtJobs').then((r) => r.nbxCmtJobs || {}).catch(() => ({}));
+  return jobsP;
+}
+async function saveJobs() {
+  const J = await loadJobs();
+  const now = Date.now();
+  Object.keys(J).forEach((k) => { if (now - J[k].at > CMT_JOB_TTL) delete J[k]; });
+  chrome.storage.session.set({ nbxCmtJobs: J }).catch(() => {});
+}
+chrome.tabs.onRemoved.addListener(async (tabId) => { const J = await loadJobs(); if (J[tabId]) { delete J[tabId]; saveJobs(); } });
+
+// 기록(열어 본 글·댓글 단 글·등록 시각) — 순서대로 저장해 겹쳐 쓰지 않게 합니다
+let logQ = Promise.resolve();
+function withLog(fn) {
+  logQ = logQ.then(async () => {
+    const r = await chrome.storage.local.get('nbxCmtLog').catch(() => ({}));
+    const log = r.nbxCmtLog && typeof r.nbxCmtLog === 'object' ? r.nbxCmtLog : {};
+    log.posts = log.posts || {}; log.done = Array.isArray(log.done) ? log.done : [];
+    const out = fn(log);
+    const now = Date.now();
+    const keys = Object.keys(log.posts);
+    if (keys.length > 1000) keys.sort((a, b) => (log.posts[a].t || 0) - (log.posts[b].t || 0)).slice(0, keys.length - 1000).forEach((k) => delete log.posts[k]);
+    log.done = log.done.filter((t) => now - t < 30 * 864e5).slice(-500);
+    await chrome.storage.local.set({ nbxCmtLog: log }).catch(() => {});
+    return out;
+  }).catch(() => {});
+  return logQ;
+}
+function logMark(key, field) {
+  if (!key) return Promise.resolve();
+  return withLog((log) => { const e = log.posts[key] || {}; e[field] = Date.now(); e.t = Date.now(); log.posts[key] = e; });
+}
+function statsOf(log) {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const done = (log && log.done) || [];
+  return { today: done.filter((t) => t >= start).length, hour: done.filter((t) => Date.now() - t < 3600e3).length, last: done.length ? Math.max(...done) : null };
+}
+async function readLog() {
+  await logQ;
+  const r = await chrome.storage.local.get('nbxCmtLog').catch(() => ({}));
+  return r.nbxCmtLog || { posts: {}, done: [] };
+}
+
+// 저장소를 읽고 고쳐 쓰는 작업은 한 줄로 세워 겹치지 않게 합니다
+let storeQ = Promise.resolve();
+const serial = (fn) => { const p = storeQ.then(fn, fn); storeQ = p.catch(() => {}); return p; };
+
+// 템플릿 사용 기록: 같은 블로그에 같은 문장이 다시 나오지 않게 합니다
+async function usedTemplates(blogId) {
+  const r = await chrome.storage.local.get('nbxCmtTpl').catch(() => ({}));
+  const u = r.nbxCmtTpl || {};
+  return { blog: ((u.blogs || {})[String(blogId || '').toLowerCase()] || []), recent: u.recent || [] };
+}
+function rememberTemplates(blogId, drafts) { return serial(() => rememberTemplatesNow(blogId, drafts)); }
+async function rememberTemplatesNow(blogId, drafts) {
+  const ids = drafts.map((d) => d.tplId).filter(Boolean);
+  if (!ids.length) return;
+  const r = await chrome.storage.local.get('nbxCmtTpl').catch(() => ({}));
+  const u = r.nbxCmtTpl || {};
+  u.blogs = u.blogs || {};
+  const b = String(blogId || '').toLowerCase();
+  if (b) u.blogs[b] = [...(u.blogs[b] || []), ...ids].slice(-30);
+  const bk = Object.keys(u.blogs);
+  if (bk.length > 400) bk.slice(0, bk.length - 400).forEach((k) => delete u.blogs[k]);
+  u.recent = [...(u.recent || []), ...ids].slice(-40);
+  await chrome.storage.local.set({ nbxCmtTpl: u }).catch(() => {});
+}
+
+// 클립보드: 보이지 않는 offscreen 문서에서 복사합니다(탭 포커스와 관계없이 동작)
+let offscreenP = null;
+async function ensureOffscreen() {
+  try {
+    if (chrome.runtime.getContexts) {
+      const ctx = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
+      if (ctx.length) return;
+    }
+  } catch (_) {}
+  if (!offscreenP) {
+    offscreenP = chrome.offscreen.createDocument({ url: 'offscreen.html', reasons: ['CLIPBOARD'], justification: '댓글 초안을 클립보드에 복사합니다' })
+      .catch((e) => { if (!/single offscreen|already/i.test(String(e && e.message))) throw e; })
+      .finally(() => { offscreenP = null; });
+  }
+  return offscreenP;
+}
+async function copyText(text) {
+  if (typeof text !== 'string' || !text) return false;
+  try {
+    await ensureOffscreen();
+    const r = await chrome.runtime.sendMessage({ target: 'nbx-offscreen', type: 'copy', text: text.slice(0, 2000) });
+    return !!(r && r.ok);
+  } catch (_) { return false; }
+}
+
+// ── AI 호출 ──
+function aiError(status, msg) {
+  const m = cleanStr(msg, 120);
+  if (status === 400 && /api key|api_key|key not valid|invalid.*key/i.test(m)) return 'API 키를 확인해 주세요';
+  if (status === 400) return '요청이 거절됐어요' + (m ? ' — ' + m : '');
+  if (status === 401 || status === 403) return 'API 키를 확인해 주세요';
+  if (status === 404) return '모델 이름을 확인해 주세요';
+  if (status === 429) return '사용 한도에 걸렸어요. 잠시 후 다시 시도해 주세요';
+  if (status >= 500) return 'AI 서버가 잠시 응답하지 않아요';
+  return 'HTTP ' + status;
+}
+async function postJson(url, headers, body) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), AI_TIMEOUT);
+  try {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body), signal: ctl.signal, credentials: 'omit', cache: 'no-store' });
+    const j = await r.json().catch(() => null);
+    if (!r.ok) { const e = j && j.error; const err = new Error(aiError(r.status, e && (e.message || e.type))); err.status = r.status; err.raw = String((e && (e.message || e.type)) || ''); throw err; }
+    return j;
+  } catch (e) {
+    if (e && e.name === 'AbortError') throw new Error('응답이 너무 늦어요(20초)');
+    if (e instanceof TypeError) throw new Error('AI 서버에 연결하지 못했어요 — 설정에서 연결 확인을 눌러 주세요');
+    throw e;
+  } finally { clearTimeout(timer); }
+}
+async function callAI(provider, apiKey, model, system, user) {
+  if (!NBX.MODEL_RE.test(model || '')) throw new Error('모델 이름을 확인해 주세요');
+  // 생각(추론)을 길게 하는 모델이 답을 쓰기 전에 한도를 다 쓰지 않도록 생각을 짧게 요청하고,
+  // 그 설정을 받지 않는 모델이면 설정을 빼고 한 번 더 보냅니다
+  const retryPlain = (e) => e && e.status === 400 && /thinking|reasoning|unsupported|unknown name|not supported|invalid argument/i.test(e.raw || '');
+  if (provider === 'gemini') {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+    const body = (thinking) => ({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ role: 'user', parts: [{ text: user }] }],
+      generationConfig: { temperature: 0.9, maxOutputTokens: 4096, responseMimeType: 'application/json', ...(thinking ? { thinkingConfig: { thinkingLevel: /lite/i.test(model) ? 'minimal' : 'low' } } : {}) }
+    });
+    let j;
+    try { j = await postJson(url, { 'x-goog-api-key': apiKey }, body(true)); }
+    catch (e) { if (!retryPlain(e)) throw e; j = await postJson(url, { 'x-goog-api-key': apiKey }, body(false)); }
+    const c = j && j.candidates && j.candidates[0];
+    const parts = (c && c.content && c.content.parts) || [];
+    const text = parts.filter((p) => !p.thought).map((p) => p.text || '').join('');
+    if (!text && j && j.promptFeedback && j.promptFeedback.blockReason) throw new Error('제미나이가 이 글에 답하지 않았어요');
+    return text;
+  }
+  if (provider === 'claude') {
+    const j = await postJson('https://api.anthropic.com/v1/messages', { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, {
+      model, max_tokens: 1024, system, messages: [{ role: 'user', content: user }]
+    });
+    return ((j && j.content) || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+  }
+  if (provider === 'openai') {
+    const body = (reason) => ({
+      model, max_completion_tokens: 4000, response_format: { type: 'json_object' }, ...(reason ? { reasoning_effort: 'low' } : {}),
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }]
+    });
+    const reasoning = /^(gpt-5|o\d)/i.test(model);
+    let j;
+    try { j = await postJson('https://api.openai.com/v1/chat/completions', { Authorization: 'Bearer ' + apiKey }, body(reasoning)); }
+    catch (e) { if (!reasoning || !retryPlain(e)) throw e; j = await postJson('https://api.openai.com/v1/chat/completions', { Authorization: 'Bearer ' + apiKey }, body(false)); }
+    return (j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+  }
+  throw new Error('알 수 없는 AI');
+}
+async function aiDrafts(provider, apiKey, model, post, cmt) {
+  const p = NBXC.buildPrompt(post, { callName: cmt.callName, style: cmt.style });
+  const text = await callAI(provider, apiKey, model, p.system, p.user);
+  const list = NBXC.parseDrafts(text);
+  if (!list.length) throw new Error('응답에서 댓글을 찾지 못했어요');
+  return list.map((t) => ({ text: t, source: provider }));
+}
+
+function sanitizePost(p) {
+  p = p && typeof p === 'object' ? p : {};
+  return {
+    blogId: ID_RE.test(p.blogId || '') ? p.blogId : '',
+    logNo: NO_RE.test(String(p.logNo || '')) ? String(p.logNo) : '',
+    title: cleanStr(p.title, 150), nick: cleanStr(p.nick, 30), blogName: cleanStr(p.blogName, 60),
+    sections: Array.isArray(p.sections) ? p.sections.map((x) => cleanStr(x, 80)).filter(Boolean).slice(0, 10) : [],
+    body: typeof p.body === 'string' ? p.body.slice(0, 5000) : ''
+  };
+}
+
+// 미리 만든 초안(다음 글) — 한 번 꺼내 쓰면 지웁니다
+async function readCache() { const r = await chrome.storage.session.get('nbxCmtCache').catch(() => ({})); return r.nbxCmtCache || {}; }
+const sigOf = (cmt, provider) => [provider, NBX.modelOf(cmt, provider), cmt.callName, cmt.style].join('|');
+function takeCache(key, sig) {
+  if (!key) return Promise.resolve(null);
+  return serial(async () => {
+    const c = await readCache();
+    const e = c[key];
+    if (!e) return null;
+    delete c[key];
+    await chrome.storage.session.set({ nbxCmtCache: c }).catch(() => {});
+    return e.sig === sig && Date.now() - e.at < CACHE_TTL && Array.isArray(e.drafts) && e.drafts.length ? e.drafts : null;
+  });
+}
+function putCache(key, sig, drafts) { return serial(() => putCacheNow(key, sig, drafts)); }
+async function putCacheNow(key, sig, drafts) {
+  const c = await readCache();
+  c[key] = { sig, drafts, at: Date.now() };
+  const ks = Object.keys(c).sort((a, b) => c[a].at - c[b].at);
+  while (ks.length > 10) delete c[ks.shift()];
+  await chrome.storage.session.set({ nbxCmtCache: c }).catch(() => {});
+}
+
+const safeCp = (n) => (n > 0 && n <= 0x10ffff && !(n >= 0xd800 && n <= 0xdfff) ? String.fromCodePoint(n) : '');
+const decodeEnt = (s) => String(s || '').replace(/&#(\d{1,8});/g, (_, n) => safeCp(+n)).replace(/&#x([0-9a-f]{1,8});/gi, (_, n) => safeCp(parseInt(n, 16)))
+  .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');
+// 글자 사이의 꾸밈 태그(<b>·<mark>)는 붙여서, 문단·줄 태그는 띄어서 없앱니다
+const stripTags = (h) => decodeEnt(String(h || '').replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h[1-6]|tr)>/gi, '\n').replace(/<\/?(p|div|li|ul|ol|h[1-6]|tr|td|th|table|section|article|img)\b[^>]*>/gi, ' ').replace(/<[^>]+>/g, '')).replace(/[ \t ]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim();
+
+// 다음 글 미리 읽기: 글 화면(PostView)을 받아 제목·닉네임·본문만 대략 뽑습니다
+async function fetchPostLite(blogId, logNo) {
+  const r = await fetch(`https://blog.naver.com/PostView.naver?blogId=${encodeURIComponent(blogId)}&logNo=${logNo}&redirect=Dlog&widgetTypeCall=true&directAccess=false`, { credentials: 'include', cache: 'no-store' });
+  if (!r.ok) return null;
+  const html = await r.text();
+  const meta = (prop) => { const m = html.match(new RegExp(`<meta[^>]+property=["']${prop}["'][^>]+content=(?:"([^"]*)"|'([^']*)')`, 'i')); return m ? decodeEnt(m[1] != null ? m[1] : m[2]) : ''; };
+  const i = html.indexOf('se-main-container');
+  const region = i >= 0 ? html.slice(i, i + 80000) : '';
+  const sections = [];
+  const sre = /se-sectionTitle[\s\S]{0,600}?se-text-paragraph[^>]*>([\s\S]*?)<\/p>/g;
+  let m;
+  while ((m = sre.exec(region)) && sections.length < 8) { const t = stripTags(m[1]); if (t) sections.push(t); }
+  return sanitizePost({ blogId, logNo, title: meta('og:title'), nick: meta('naverblog:nickname'), sections, body: stripTags(region).slice(0, 5000) });
+}
+async function prefetch(next) {
+  try {
+    if (!next || !ID_RE.test(next.blogId || '') || !NO_RE.test(String(next.logNo || ''))) return;
+    const s = await getSettings();
+    const prov = s.cmt.provider;
+    if (!s.cmt.prefetch || prov === 'template') return;
+    const apiKey = (await getKeys())[prov];
+    if (!apiKey) return;
+    const key = postKeyOf(next.blogId, next.logNo);
+    if ((await readCache())[key] || prefetching.has(key)) return;
+    prefetching.add(key);
+    const post = await fetchPostLite(next.blogId, String(next.logNo));
+    if (!post || (!post.body && !post.title)) return;
+    post.title = post.title || cleanStr(next.title, 150);
+    post.nick = post.nick || cleanStr(next.nick, 30);
+    const drafts = await aiDrafts(prov, apiKey, NBX.modelOf(s.cmt, prov), post, { ...s.cmt, relation: next.relation });
+    await putCache(key, sigOf(s.cmt, prov), drafts);
+  } catch (_) { /* 미리 만들기는 실패해도 됩니다 — 글을 열 때 다시 만듭니다 */ }
+  finally { if (next) prefetching.delete(postKeyOf(next.blogId, next.logNo)); }
+}
+const prefetching = new Set();
+
+async function cmtGenerate(msg) {
+  const s = await getSettings();
+  const c = s.cmt;
+  const post = sanitizePost(msg.post);
+  const key = postKeyOf(post.blogId, post.logNo);
+  const want = msg.mode === 'template' ? 'template' : c.provider;
+  let drafts = [], provider = 'template', note = '';
+  if (want !== 'template') {
+    const info = NBX.AI_PROVIDERS[want];
+    const apiKey = (await getKeys())[want];
+    if (!apiKey) note = `${info.label} API 키가 없어 템플릿으로 만들었어요. 설정에서 키를 넣으면 AI가 글을 읽고 만들어요.`;
+    else {
+      const cached = msg.regen ? null : await takeCache(key, sigOf(c, want));
+      if (cached) { drafts = cached; provider = want; }
+      else {
+        try { drafts = await aiDrafts(want, apiKey, NBX.modelOf(c, want), post, { ...c, relation: msg.relation }); provider = want; }
+        catch (e) { note = `${info.label} 연결에 실패해 템플릿으로 만들었어요. (${cleanStr(String(e && e.message || e), 120)})`; }
+      }
+    }
+  }
+  const used = await usedTemplates(post.blogId);
+  if (drafts.length < 3) {
+    const extra = NBXC.compose(post, { callName: c.callName, relation: msg.relation }, used).slice(0, 3 - drafts.length);
+    drafts = drafts.concat(extra);
+    if (provider === 'template') drafts = drafts.slice(0, 3);
+    await rememberTemplates(post.blogId, extra);
+  }
+  const copied = msg.copy === true ? await copyText(drafts[0].text) : false;
+  if (key) await logMark(key, 'g');
+  return { ok: true, drafts, provider, providerLabel: provider === 'template' ? '템플릿' : NBX.AI_PROVIDERS[provider].label, note, copied, stats: statsOf(await readLog()) };
+}
+
+async function openForComment(msg, sender) {
+  if (!ID_RE.test(msg.blogId || '') || !NO_RE.test(String(msg.logNo || ''))) return { ok: false, error: 'bad-id' };
+  const props = { url: `https://blog.naver.com/${msg.blogId}/${msg.logNo}`, active: true };
+  if (sender.tab) { props.index = sender.tab.index + 1; props.openerTabId = sender.tab.id; props.windowId = sender.tab.windowId; }
+  const tab = await chrome.tabs.create(props);
+  try { await chrome.windows.update(tab.windowId, { focused: true }); } catch (_) {}
+  const J = await loadJobs();
+  J[tab.id] = { blogId: msg.blogId, logNo: String(msg.logNo), title: cleanStr(msg.title, 150), nick: cleanStr(msg.nick, 30), relation: msg.relation === 'buddy' ? 'buddy' : 'other', at: Date.now() };
+  saveJobs();
+  logMark(postKeyOf(msg.blogId, msg.logNo), 'o');
+  if (msg.next) prefetch(msg.next);
+  return { ok: true, tabId: tab.id };
+}
+
+async function cmtHello(msg, sender) {
+  const tabId = sender.tab && sender.tab.id;
+  if (tabId == null) return { job: null };
+  const J = await loadJobs();
+  const job = J[tabId];
+  if (!job || Date.now() - job.at > CMT_JOB_TTL) return { job: null };
+  if (!job.any) {
+    if (!msg.logNo || String(msg.logNo) !== job.logNo) return { job: null };
+    if (msg.blogId && job.blogId && String(msg.blogId).toLowerCase() !== job.blogId.toLowerCase()) return { job: null };
+  }
+  // 한 번 쓰면 없앱니다: 같은 탭에서 다른 글로 옮기거나 뒤로 가도 저절로 다시 돌지 않습니다
+  delete J[tabId];
+  saveJobs();
+  return { job: { ...job, blogId: job.any ? msg.blogId : job.blogId, logNo: job.any ? msg.logNo : job.logNo } };
+}
+
+// 이웃 새 글: 로그인한 크롬에서 네이버 "이웃새글" 목록을 읽습니다
+function collectPosts(node, out, depth) {
+  if (!node || depth > 7 || out.length >= 200) return out;
+  if (Array.isArray(node)) { node.forEach((n) => collectPosts(n, out, depth + 1)); return out; }
+  if (typeof node === 'object') {
+    const blogId = node.blogId || node.domainIdOrBlogId;
+    if (node.logNo && typeof blogId === 'string') {
+      const d = node.addDate ?? node.postDate ?? node.createdDate ?? node.regDate ?? node.addTimestamp;
+      out.push({
+        blogId, logNo: String(node.logNo),
+        title: stripTags(node.title || node.titleWithInspectMessage || node.postTitle || node.subject || '').slice(0, 150),
+        nick: stripTags(node.nickName || node.nickname || node.userNickName || node.blogNickName || '').slice(0, 30),
+        blogName: stripTags(node.blogName || node.blogTitle || '').slice(0, 60),
+        at: typeof d === 'number' ? d : (Date.parse(d) || null)
+      });
+      return out;
+    }
+    Object.values(node).forEach((v) => { if (v && typeof v === 'object') collectPosts(v, out, depth + 1); });
+  }
+  return out;
+}
+async function buddyFeed(page) {
+  const p = Math.max(1, Math.min(20, parseInt(page, 10) || 1));
+  let r;
+  try { r = await fetch(`https://section.blog.naver.com/ajax/BuddyPostList.naver?page=${p}&groupId=0`, { credentials: 'include', cache: 'no-store' }); }
+  catch (e) { return { ok: false, error: 'network' }; }
+  if (!r.ok) return { ok: false, error: 'HTTP ' + r.status };
+  const text = (await r.text()).replace(/^\)\]\}',?\s*/, '');
+  let j;
+  try { j = JSON.parse(text); } catch (_) { return { ok: false, error: /login|nidlogin|로그인/i.test(text) ? 'login' : 'not-json' }; }
+  const seen = new Set();
+  const items = collectPosts(j, [], 0).filter((x) => ID_RE.test(x.blogId) && NO_RE.test(x.logNo) && !seen.has(x.blogId.toLowerCase() + '/' + x.logNo) && seen.add(x.blogId.toLowerCase() + '/' + x.logNo));
+  if (!items.length) return { ok: false, error: 'empty', page: p };
+  return { ok: true, items, page: p };
+}
+
+// 키워드 노출 글: 네이버 블로그 검색 결과의 글 목록(제목·블로거)을 순서대로
+async function searchPosts(q) {
+  const res = await fetch(SEARCH_URL + encodeURIComponent(String(q).slice(0, 100)), { credentials: 'omit', cache: 'no-store' });
+  if (!res.ok) return { ok: false, error: 'HTTP ' + res.status };
+  const html = await res.text();
+  const items = new Map();
+  const names = {};
+  const aRe = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = aRe.exec(html))) {
+    const hm = m[1].match(/href=["']([^"']+)["']/i);
+    if (!hm) continue;
+    const href = decodeEnt(hm[1]);
+    const text = stripTags(m[2]).replace(/\s+/g, ' ').trim();
+    const pm = href.match(/^https?:\/\/(?:m\.)?blog\.naver\.com\/([A-Za-z0-9_-]{2,40})\/(\d{6,20})(?:[?#/]|$)/);
+    if (pm) {
+      const key = pm[1].toLowerCase() + '/' + pm[2];
+      const it = items.get(key) || { blogId: pm[1], logNo: pm[2], title: '', tp: 0 };
+      // 제목다운 글자(글자 4자 이상, 한글·영문 포함)를 고르고, class에 title이 들어간 링크를 우선합니다
+      const ok = text.length >= 4 && /[가-힣A-Za-z]{2}/.test(text);
+      const pri = ok ? (/class=["'][^"']*title/i.test(m[1]) ? 2 : 1) : 0;
+      if (pri > it.tp) { it.title = text.slice(0, 120); it.tp = pri; }
+      items.set(key, it);
+      continue;
+    }
+    const bm = href.match(/^https?:\/\/(?:m\.)?blog\.naver\.com\/([A-Za-z0-9_-]{2,40})\/?(?:[?#]|$)/);
+    if (bm && text && text.length <= 30 && !names[bm[1].toLowerCase()]) names[bm[1].toLowerCase()] = text;
+  }
+  const list = [...items.values()].slice(0, 30).map(({ tp, ...it }) => ({ ...it, nick: names[it.blogId.toLowerCase()] || '' }));
+  if (!list.length && !/검색결과가 없습니다|검색 결과가 없습니다/.test(html)) return { ok: false, error: 'unexpected-page' };
+  return { ok: true, items: list };
+}
+
+async function cmtLogFor(keys) {
+  const log = await readLog();
+  const marks = {};
+  (Array.isArray(keys) ? keys.slice(0, 200) : []).forEach((k) => { if (typeof k === 'string' && log.posts[k]) marks[k] = log.posts[k]; });
+  return { stats: statsOf(log), marks };
+}
+
+// (예전 시험판이 chrome.storage.local에 둔 키가 있으면 보관함으로 옮기고 지웁니다)
+chrome.storage.local.get('nbxAIKeys').then(async (r) => {
+  if (r && r.nbxAIKeys && typeof r.nbxAIKeys === 'object') { await NBXKeys.setAll({ ...(await NBXKeys.getAll()), ...r.nbxAIKeys }); await chrome.storage.local.remove('nbxAIKeys'); }
+}).catch(() => {});
+async function aiTest(provider) {
+  if (!NBX.AI_PROVIDERS[provider]) return { ok: false, error: '알 수 없는 AI' };
+  const s = await getSettings();
+  const apiKey = (await getKeys())[provider];
+  if (!apiKey) return { ok: false, error: 'API 키를 먼저 넣어 주세요' };
+  try {
+    const text = await callAI(provider, apiKey, NBX.modelOf(s.cmt, provider), '너는 연결 확인용 도우미다. JSON 하나만 출력한다.', '{"comments":["연결 확인 완료"]} 를 그대로 출력해.');
+    const list = NBXC.parseDrafts(text);
+    return { ok: true, sample: list[0] || cleanStr(text, 60) };
+  } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, send) => {
+  if (sender.id !== chrome.runtime.id || !msg || msg.target === 'nbx-offscreen' || typeof msg.type !== 'string' || !msg.type.startsWith('nbx-cmt') && msg.type !== 'nbx-ai-test') return false;
+  const run = (p) => { p.then(send, (e) => send({ ok: false, error: String((e && e.message) || e) })); return true; };
+  switch (msg.type) {
+    case 'nbx-cmt-open': return run(openForComment(msg, sender));
+    case 'nbx-cmt-hello': return run(cmtHello(msg, sender));
+    case 'nbx-cmt-generate': return run(cmtGenerate(msg));
+    case 'nbx-cmt-copy': return run(copyText(msg.text).then((ok) => ({ ok })));
+    case 'nbx-cmt-posted': {
+      const key = postKeyOf(msg.blogId, msg.logNo);
+      return run(withLog((log) => {
+        const now = Date.now();
+        const e = log.posts[key] || {};
+        if (key && e.p && now - e.p < 5000) return; // 두 번 누름은 한 번으로
+        if (key) { e.p = now; e.t = now; log.posts[key] = e; }
+        log.done.push(now);
+      }).then(readLog).then((log) => ({ ok: true, stats: statsOf(log) })));
+    }
+    case 'nbx-cmt-here': {
+      const tabId = sender.tab && sender.tab.id;
+      if (tabId == null) return false;
+      return run(loadJobs().then((J) => {
+        J[tabId] = { any: true, relation: 'other', at: Date.now() };
+        saveJobs();
+        chrome.tabs.sendMessage(tabId, { type: 'nbx-cmt-start' }).catch(() => {});
+        return { ok: true };
+      }));
+    }
+    case 'nbx-cmt-buddy': return run(buddyFeed(msg.page));
+    case 'nbx-cmt-search': return typeof msg.q === 'string' && msg.q.trim() ? run(searchPosts(msg.q.trim())) : false;
+    case 'nbx-cmt-log': return run(cmtLogFor(msg.keys));
+    case 'nbx-ai-test': return run(aiTest(msg.provider));
+    default: return false;
+  }
 });

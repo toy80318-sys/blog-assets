@@ -169,7 +169,71 @@ function renderGeneral() {
   $('#tipsUrl').value = S.tipsUrl || '';
   document.querySelectorAll('input[name="barMode"]').forEach((r) => (r.checked = r.value === S.barMode));
   document.querySelectorAll('.extra').forEach((c) => (c.checked = (S.popupExtras || []).includes(c.value)));
+  renderCmt();
 }
+
+// ── 이웃 소통 · 댓글 도우미 ──
+let AIKEYS = {};
+// 키는 확장 전용 보관함(IndexedDB)에 둡니다 — 네이버 화면의 스크립트는 읽을 수 없습니다
+NBXKeys.getAll().then((k) => { AIKEYS = k || {}; renderCmt(); }).catch(() => {});
+function renderCmt() {
+  const c = S.cmt;
+  document.querySelectorAll('input[name="cmtProvider"]').forEach((r) => (r.checked = r.value === c.provider));
+  const info = NBX.AI_PROVIDERS[c.provider];
+  $('#aiBox').style.display = info ? '' : 'none';
+  if (info) {
+    $('#aiName').textContent = info.label + ' API 키';
+    if (document.activeElement !== $('#aiKey')) $('#aiKey').value = AIKEYS[c.provider] || '';
+    $('#aiModel').placeholder = info.model;
+    if (document.activeElement !== $('#aiModel')) $('#aiModel').value = c.models[c.provider] || '';
+    $('#aiModelHint').textContent = '비워 두면 ' + info.model;
+    $('#aiHint').textContent = info.keyHint;
+    $('#aiKeyUrl').href = info.keyUrl;
+  }
+  if (document.activeElement !== $('#cmtStyle')) $('#cmtStyle').value = c.style || '';
+  $('#cmtCallName').checked = c.callName;
+  $('#cmtPrefill').checked = c.prefill;
+  $('#cmtPrefetch').checked = c.prefetch;
+  $('#cmtLinkButtons').checked = c.linkButtons;
+}
+document.querySelectorAll('input[name="cmtProvider"]').forEach((r) => r.addEventListener('change', () => {
+  if (!r.checked) return;
+  S.cmt.provider = r.value; $('#aiMsg').textContent = ''; save(); renderCmt();
+}));
+let keyTimer;
+$('#aiKey').addEventListener('input', (e) => {
+  const p = S.cmt.provider;
+  const v = e.target.value.trim();
+  if (v) AIKEYS[p] = v; else delete AIKEYS[p];
+  clearTimeout(keyTimer);
+  keyTimer = setTimeout(() => NBXKeys.setAll(AIKEYS).then(() => { $('#saved').style.color = ''; $('#saved').textContent = 'API 키를 저장했습니다'; setTimeout(() => ($('#saved').textContent = ''), 1500); }), 300);
+});
+$('#aiShow').addEventListener('click', () => { const k = $('#aiKey'); k.type = k.type === 'password' ? 'text' : 'password'; $('#aiShow').textContent = k.type === 'password' ? '보기' : '숨기기'; });
+$('#aiModel').addEventListener('input', (e) => {
+  const v = e.target.value.trim();
+  const ok = !v || NBX.MODEL_RE.test(v);
+  e.target.style.borderColor = ok ? '' : '#d32f2f';
+  if (ok) { S.cmt.models[S.cmt.provider] = v; save(); }
+});
+$('#aiTest').addEventListener('click', async () => {
+  const p = S.cmt.provider;
+  const info = NBX.AI_PROVIDERS[p];
+  if (!info) return;
+  const msg = $('#aiMsg');
+  // 연결이 막히는 환경을 위해 AI 주소 접근 권한을 이 버튼에서 받습니다(이미 있으면 묻지 않습니다). 클릭 직후에 요청해야 합니다
+  const perm = chrome.permissions.request({ origins: [info.origin] }).catch(() => false);
+  clearTimeout(keyTimer);
+  await NBXKeys.setAll(AIKEYS);
+  await flush();
+  msg.style.color = '#6b7280'; msg.textContent = '확인 중…';
+  await perm;
+  const r = await chrome.runtime.sendMessage({ type: 'nbx-ai-test', provider: p }).catch((e) => ({ ok: false, error: String(e) }));
+  if (r && r.ok) { msg.style.color = '#027a38'; msg.textContent = `연결됐어요 ✓ (${info.label} 응답: ${String(r.sample || '').slice(0, 30)})`; }
+  else { msg.style.color = '#c62828'; msg.textContent = '연결 실패: ' + ((r && r.error) || '알 수 없는 오류'); }
+});
+$('#cmtStyle').addEventListener('input', (e) => { S.cmt.style = e.target.value.slice(0, 300); save(); });
+[['#cmtCallName', 'callName'], ['#cmtPrefill', 'prefill'], ['#cmtPrefetch', 'prefetch'], ['#cmtLinkButtons', 'linkButtons']].forEach(([id, k]) =>
+  $(id).addEventListener('change', (e) => { S.cmt[k] = e.target.checked; save(); }));
 
 async function renderCmds() {
   const box = $('#cmds');
@@ -196,6 +260,7 @@ $('#q2style').addEventListener('change', (e) => { S.quote2Style = e.target.value
 $('#showBar').addEventListener('change', (e) => { S.showBar = e.target.checked; save(); });
 $('#showPopup').addEventListener('change', (e) => { S.showPopup = e.target.checked; save(); });
 $('#showPanel').addEventListener('change', (e) => { S.showPanel = e.target.checked; save(); });
+$('#panelPosReset').addEventListener('click', () => chrome.storage.local.remove('nbxPanelPos').then(() => { $('#saved').style.color = ''; $('#saved').textContent = '패널을 처음 위치로 되돌렸습니다'; setTimeout(() => ($('#saved').textContent = ''), 1800); }));
 $('#trustedEnter').addEventListener('change', async (e) => {
   if (e.target.checked) {
     // 디버거 권한이 없을 때만(예: 웹스토어 판에서 선택 권한으로 바뀐 경우) 요청합니다

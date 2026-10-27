@@ -42,6 +42,7 @@
   .cmdrow { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; border-bottom: 1px dashed #f0d4d4; }
   .cmdrow em { font-style: normal; font-weight: 700; } .cmdrow em.unset { color: #d32f2f; font-weight: 400; }
   .cmdbox button { margin-top: 10px; width: 100%; padding: 9px; border-radius: 8px; border: 1px solid #b42318; background: #fff; color: #b42318; font: inherit; font-weight: 700; cursor: pointer; }
+  .aibox { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin: 6px 0 12px; }
   .cmdbox p { font-size: 12px; color: #7a6060; margin: 8px 0 0; }
 </style>
 </head>
@@ -72,6 +73,31 @@
   <label class="opt"><input type="checkbox" id="trustedEnter"> 확실한 엔터 모드 (기본으로 켜져 있음) — 실제 키보드와 같은 엔터를 넣습니다</label>
   <p class="desc" style="margin-left:22px">네이버 에디터는 실제 키보드 입력만 받아들이는 경우가 있어, 크롬의 디버거 기능으로 진짜 키보드와 같은 엔터를 넣습니다. 엔터+소제목을 누르는 순간 화면 위에 "디버깅을 시작함" 안내 줄이 잠깐 나타났다 사라지는 것은 이 기능 때문입니다. 끄면 안내 줄은 나타나지 않지만, 에디터에 따라 새 줄이 생기지 않을 수 있습니다.</p>
 
+  <h2 id="cmt">이웃 소통 · 댓글 도우미</h2>
+  <p class="desc">블로그 화면 왼쪽 패널의 <b>이웃 소통</b> 탭이나 네이버 검색·이웃새글 화면의 <b>💬 댓글</b> 버튼으로 글을 열면, 새 탭에서 댓글창으로 이동하고 그 글의 제목·소제목·본문과 블로거 닉네임을 조합한 댓글이 클립보드에 복사돼 있습니다. 댓글창에 붙여 넣고 고친 뒤 <b>등록은 직접</b> 눌러 주세요.</p>
+  <div class="opt" style="flex-wrap:wrap"><b style="font-size:13px">댓글 만드는 방법</b>
+    <label><input type="radio" name="cmtProvider" value="gemini"> 제미나이 (기본)</label>
+    <label><input type="radio" name="cmtProvider" value="claude"> 클로드</label>
+    <label><input type="radio" name="cmtProvider" value="openai"> GPT</label>
+    <label><input type="radio" name="cmtProvider" value="template"> 템플릿만 (키 없이)</label>
+  </div>
+  <div id="aiBox" class="aibox">
+    <div class="row" style="margin-bottom:8px"><b id="aiName" style="font-size:13px;min-width:120px">제미나이 API 키</b>
+      <input type="password" id="aiKey" autocomplete="off" spellcheck="false" placeholder="API 키를 붙여 넣으세요" style="flex:1;min-width:200px;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #cfd4da;border-radius:7px">
+      <button type="button" id="aiShow" class="tg" style="width:auto;padding:0 8px" title="키 보기">보기</button></div>
+    <div class="row" style="margin-bottom:8px"><span style="font-size:13px;min-width:120px">모델</span>
+      <input type="text" id="aiModel" spellcheck="false" style="flex:1;min-width:200px"><span class="fdesc" id="aiModelHint"></span></div>
+    <div class="row"><button type="button" id="aiTest" style="padding:7px 14px;border-radius:8px;border:1px solid #03a94d;background:#03a94d;color:#fff;font:inherit;font-weight:700;cursor:pointer">연결 확인</button>
+      <span id="aiMsg" style="font-size:12.5px"></span></div>
+    <p class="desc" style="margin:8px 0 0"><span id="aiHint"></span> · <a id="aiKeyUrl" target="_blank" rel="noopener">키 받는 곳</a><br>키는 이 크롬에만 저장되고, 댓글을 만들 때 글 제목·소제목·본문 일부와 닉네임이 선택한 AI 회사로 보내집니다. 제미나이 무료 등급으로 보낸 내용은 구글 제품 개선에 쓰일 수 있습니다.</p>
+  </div>
+  <div class="opt" style="align-items:flex-start;flex-direction:column;gap:4px"><span style="font-size:13px">추가 요청 (말투 등, 300자까지)</span>
+    <textarea id="cmtStyle" rows="2" maxlength="300" placeholder="예: 반말 없이 다정하게, 이모지는 쓰지 말 것" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #cfd4da;border-radius:7px;resize:vertical"></textarea></div>
+  <label class="opt"><input type="checkbox" id="cmtCallName"> 블로거 닉네임을 "○○님"으로 부르기 (부르기 어색한 닉네임은 빼고 씁니다)</label>
+  <label class="opt"><input type="checkbox" id="cmtPrefill"> 복사와 함께 댓글창에 바로 채워 넣기</label>
+  <label class="opt"><input type="checkbox" id="cmtPrefetch"> 목록의 다음 글 댓글을 미리 만들어 두기 (기다림이 줄지만 AI 사용량이 늘어요)</label>
+  <label class="opt"><input type="checkbox" id="cmtLinkButtons"> 네이버 검색·이웃새글 화면의 글 옆에 💬 댓글 버튼 표시</label>
+
   <h2>화면 표시</h2>
   <label class="opt"><input type="checkbox" id="showBar"> 글쓰기 화면에 단축키 버튼 표시 (단축키가 듣지 않을 때 클릭으로 실행)</label>
   <div class="opt" style="padding-left:22px;flex-wrap:wrap">
@@ -79,7 +105,9 @@
     <label><input type="radio" name="barMode" value="float"> 떠 있는 바 (끌어서 원하는 곳으로 이동)</label>
   </div>
   <label class="opt"><input type="checkbox" id="showPopup"> 텍스트 선택 시 미니 팝업 표시</label>
-  <label class="opt"><input type="checkbox" id="showPanel"> 블로그 화면 왼쪽에 분석 패널 표시 (채널·포스트 분석, 검색 노출 확인)</label>
+  <label class="opt"><input type="checkbox" id="showPanel"> 블로그 화면에 분석 패널 표시 (채널·포스트 분석, 검색 노출 확인, 이웃 소통)</label>
+  <div class="opt" style="padding-left:22px"><span class="fdesc">패널은 작은 버튼이나 펼친 창의 TOYBLOCK 줄을 끌어서 옮길 수 있어요.</span>
+    <button type="button" id="panelPosReset" style="padding:4px 10px;border-radius:7px;border:1px solid #cfd4da;background:#fff;cursor:pointer;font:inherit;font-size:12.5px">위치 처음으로</button></div>
   <div class="opt" style="flex-wrap:wrap;padding-left:22px">
     <span style="font-size:13px">블로그 점수 팁 페이지 주소</span>
     <input type="text" id="tipsUrl" placeholder="https://내사이트.imweb.me/blog-tips (비워 두면 확장에 들어 있는 페이지)" style="flex:1;min-width:260px">
@@ -101,6 +129,7 @@
   <p id="disc" style="font-size:11px;color:#9aa3ae;margin:6px 0 0"></p>
 </div>
 <script src="features.js"></script>
+<script src="keystore.js"></script>
 <script src="options.js"></script>
 </body>
 </html>
