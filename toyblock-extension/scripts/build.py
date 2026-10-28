@@ -81,9 +81,16 @@ def main():
     notes_path = os.path.join(UPDATE, 'notes.txt')
     notes = open(notes_path, encoding='utf-8').read().strip() if os.path.exists(notes_path) else ''
     released = prev.get('released_at') if prev.get('version') == version else datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-    # 웹스토어 주소(등록 뒤 update/store.json에 적으면 폴더 설치본이 '웹스토어로 옮기기' 안내를 띄웁니다)
+    # 웹스토어 정보(등록 뒤 update/store.json의 extension_id에 32자 ID를 적으면
+    #   · 폴더 설치본이 '웹스토어로 옮기기' 안내를 띄우고
+    #   · 윈도우 설치 프로그램(dist/toyblock-setup.exe)을 만듭니다)
     store_path = os.path.join(UPDATE, 'store.json')
     store = json.load(open(store_path, encoding='utf-8')) if os.path.exists(store_path) else {}
+    ext_id = str(store.get('extension_id', '')).strip()
+    if ext_id and not __import__('re').fullmatch(r'[a-p]{32}', ext_id):
+        raise SystemExit('update/store.json의 extension_id는 a~p 32자여야 합니다: ' + ext_id)
+    if ext_id and not store.get('store_url'):
+        store['store_url'] = f'https://chromewebstore.google.com/detail/{ext_id}'
     info = {
         'name': manifest['name'],
         'version': version,
@@ -95,9 +102,21 @@ def main():
     }
     changed_ver = write_if_changed(vpath, (json.dumps(info, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
 
+    # 4) 윈도우 설치 프로그램: 웹스토어 ID가 있고 makensis가 있을 때만
+    changed_setup = False
+    if ext_id:
+        import shutil, subprocess
+        if shutil.which('makensis'):
+            out = os.path.join(BUILD, 'toyblock-setup.exe')
+            subprocess.run(['makensis', '-V2', f'-DEXT_ID={ext_id}', f'-DVERSION={version}', f'-DOUTFILE={out}', os.path.join(ROOT, 'installer', 'toyblock-setup.nsi')], check=True)
+            changed_setup = write_if_changed(os.path.join(DIST, 'toyblock-setup.exe'), open(out, 'rb').read())
+        else:
+            print('makensis가 없어 설치 프로그램은 건너뜁니다')
+
     print(f'version={version}')
     print(f'package_changed={str(changed_zip).lower()}')
     print(f'version_json_changed={str(changed_ver).lower()}')
+    print(f'setup_changed={str(changed_setup).lower()}')
     print(f'store_zip={store_zip}')
     gh_out = os.environ.get('GITHUB_OUTPUT')
     if gh_out:
