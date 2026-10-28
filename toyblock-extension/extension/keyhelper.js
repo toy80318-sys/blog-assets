@@ -54,7 +54,10 @@
 
   let busy = false, done = false, offered = '';
   async function connect(text, how) {
-    const f = findKey(text);
+    let f = findKey(text);
+    // 붙여넣기·버튼은 키 모양을 몰라도 키처럼 생긴 한 덩어리 글이면 이 회사 키로 받습니다(키 형식이 바뀌어도 되도록)
+    const raw = String(text || '').trim().replace(/^["'\s]+|["'\s]+$/g, '');
+    if (!f && how !== 'copy' && /^[A-Za-z0-9._\-]{20,300}$/.test(raw)) f = { provider: cfg.provider, key: raw };
     if (!f) { if (how === 'paste') status('AI 키 모양이 아니에요. 키 전체를 복사했는지 확인해 주세요', 'err'); return; }
     if (busy || (done && f.key === done)) return;
     if (!alive()) { status('토이블록이 업데이트돼 연결이 끊겼어요. 이 화면을 새로고침(F5)해 주세요', 'err'); return; }

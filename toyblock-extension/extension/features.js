@@ -129,7 +129,7 @@
   // keyRe: 키 모양(붙여 넣거나 복사한 글에서 어떤 AI 키인지 알아볼 때 씀)
   const AI_PROVIDERS = {
     gemini: { label: '제미나이', model: 'gemini-3.5-flash-lite', origin: 'https://generativelanguage.googleapis.com/*', keyUrl: 'https://aistudio.google.com/apikey', keyHint: 'Google AI Studio에서 무료로 받을 수 있습니다(카드 등록 없음)',
-      console: ['https://aistudio.google.com/*'], keyRe: /AIza[0-9A-Za-z_\-]{35}/, free: true },
+      console: ['https://aistudio.google.com/*'], keyRe: /AQ\.[A-Za-z0-9_\-]{20,300}(?:\.[A-Za-z0-9_\-]+)*|AIza[0-9A-Za-z_\-]{35}/, free: true }, // 2026-05-28부터 새 키는 AQ.로 시작(인증 키)
     claude: { label: '클로드', model: 'claude-haiku-5-5', origin: 'https://api.anthropic.com/*', keyUrl: 'https://platform.claude.com/settings/keys', keyHint: 'Claude Console의 API keys에서 만듭니다(결제 크레딧 필요)',
       console: ['https://platform.claude.com/*', 'https://console.anthropic.com/*'], keyRe: /sk-ant-api\d{2}-[A-Za-z0-9_\-]{20,250}/ },
     openai: { label: 'GPT', model: 'gpt-5-mini', origin: 'https://api.openai.com/*', keyUrl: 'https://platform.openai.com/api-keys', keyHint: 'OpenAI 플랫폼의 API keys에서 만듭니다(결제 등록 필요)',

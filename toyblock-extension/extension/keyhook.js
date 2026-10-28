@@ -4,7 +4,7 @@
 (function () {
   if (window.__nbxKeyHook) return;
   window.__nbxKeyHook = 1;
-  const RE = /AIza[0-9A-Za-z_\-]{35}|sk-[A-Za-z0-9_\-]{20,300}/;
+  const RE = /AQ\.[A-Za-z0-9_\-]{20,300}|AIza[0-9A-Za-z_\-]{35}|sk-[A-Za-z0-9_\-]{20,300}/;
   const post = (t) => { try { if (typeof t === 'string' && RE.test(t)) window.postMessage({ __nbxKeyHook: 1, text: t.slice(0, 2000) }, location.origin); } catch (_) {} };
   try {
     const C = window.Clipboard && window.Clipboard.prototype;

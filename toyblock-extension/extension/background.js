@@ -350,11 +350,13 @@ async function copyText(text) {
 // ── AI 호출 ──
 function aiError(status, msg) {
   const m = cleanStr(msg, 120);
-  if (status === 400 && /api key|api_key|key not valid|invalid.*key/i.test(m)) return 'API 키를 확인해 주세요';
+  if (/unrestricted/i.test(m)) return '제한이 없는 예전 키라 구글이 막았어요 — AI Studio에서 새 키를 만들어 넣어 주세요';
+  if (/ACCESS_TOKEN_TYPE_UNSUPPORTED/i.test(m)) return '이 키 형식을 받지 않는 경로예요 — 키 앞뒤에 빠진 글자가 없는지 확인하고, 안 되면 AI Studio에서 새 키를 만들어 주세요';
+  if (status === 400 && /api key|api_key|key not valid|invalid.*key/i.test(m)) return 'API 키를 확인해 주세요 (' + m.slice(0, 60) + ')';
   if (status === 400 && /not scoped to a workspace|anthropic-workspace-id/i.test(m)) return '이 클로드 키는 워크스페이스가 정해지지 않았어요 — 키를 만들 때 워크스페이스(Default)를 골라 다시 만들어 주세요';
   if (status === 400) return '요청이 거절됐어요' + (m ? ' — ' + m : '');
   if (status === 402) return '크레딧이 부족해요 — 무료 모델을 쓰거나 크레딧을 충전해 주세요';
-  if (status === 401 || status === 403) return 'API 키를 확인해 주세요';
+  if (status === 401 || status === 403) return 'API 키를 확인해 주세요' + (m ? ' (' + m.slice(0, 60) + ')' : '');
   if (status === 404) return '모델 이름을 확인해 주세요';
   if (status === 429 && /free|per-day|daily/i.test(m)) return '무료 사용 한도(하루 횟수)에 걸렸어요. 내일 다시 쓰거나 다른 AI를 골라 주세요';
   if (status === 429) return '사용 한도에 걸렸어요. 잠시 후 다시 시도해 주세요';
