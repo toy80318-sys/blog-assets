@@ -17,7 +17,7 @@
 
   let settings = NBX.merge(null);
   const S = { open: false, tab: 'channel', blogId: null, channel: null, chLoading: false, chError: '', post: null, expo: null, expoRun: null, postExpo: null,
-    cmt: { mode: 'buddy', buddy: { items: [], page: 0, loading: false, error: '', more: true }, search: { q: '', items: [], loading: false, error: '', done: false }, marks: {}, stats: null, started: false } };
+    cmt: { mode: 'buddy', buddy: { items: [], page: 0, loading: false, error: '', more: true }, search: { q: '', items: [], loading: false, error: '', done: false }, marks: {}, stats: null, started: false, hidden: {}, showHidden: false } };
 
   // ───────────── 유틸 ─────────────
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -603,15 +603,37 @@
       next: nx ? { blogId: nx.blogId, logNo: nx.logNo, title: nx.title, nick: nx.nick, relation } : null }).catch(() => {});
     render();
   }
+  // 이웃 소통 목록에서 뺄 글: 네이버 공식 블로그 · 댓글을 닫은 글 · 내가 숨긴 블로그
+  const HIDE_KEY = 'nbxCmtHide';
+  const skipWhy = (it) => (S.cmt.hidden[String(it.blogId).toLowerCase()] ? 'hidden' : it.official ? 'official' : it.commentOff ? 'closed' : '');
+  function loadHidden() {
+    return chrome.storage.local.get(HIDE_KEY).then((r) => { S.cmt.hidden = (r && r[HIDE_KEY]) || {}; }).catch(() => {});
+  }
+  function setHidden(blogId, on) {
+    const k = String(blogId).toLowerCase();
+    if (on) S.cmt.hidden[k] = Date.now(); else delete S.cmt.hidden[k];
+    const keys = Object.keys(S.cmt.hidden);
+    if (keys.length > 300) keys.sort((a, b) => S.cmt.hidden[a] - S.cmt.hidden[b]).slice(0, keys.length - 300).forEach((x) => delete S.cmt.hidden[x]);
+    chrome.storage.local.set({ [HIDE_KEY]: S.cmt.hidden }).catch(() => {});
+    render();
+  }
   function itemList(list, src) {
     if (!list.length) return '';
-    return `<ol class="clist">${list.map((it, i) => {
+    const rows = list.map((it, i) => ({ it, i, why: skipWhy(it) }));
+    const shown = S.cmt.showHidden ? rows : rows.filter((r) => !r.why);
+    const skipped = rows.length - rows.filter((r) => !r.why).length;
+    const WHY = { hidden: '숨긴 블로그', official: '네이버 공식 블로그', closed: '댓글 닫힘' };
+    let h = shown.length ? `<ol class="clist">${shown.map(({ it, i, why }) => {
       const mk = S.cmt.marks[keyOf(it)] || {};
-      const st = mk.p ? '<span class="cs done">✓ 댓글</span>' : it.commentOff ? '<span class="cs">댓글 닫힘</span>' : mk.o ? '<span class="cs">열어봄</span>' : '';
-      const sub = [it.nick || it.blogName || it.blogId, it.at ? ago(it.at) : ''].filter(Boolean).map(esc).join(' · ');
-      return `<li class="ci ${mk.p || it.commentOff ? 'dim' : ''}" data-act="cmtOpen" data-src="${src}" data-i="${i}" title="새 탭에서 댓글창으로 이동하고 댓글을 복사합니다">
-        <div class="ct">${esc(it.title || '(제목 없음)')}</div><div class="cm"><span>${sub}</span>${st}<b class="go">💬</b></div></li>`;
-    }).join('')}</ol>`;
+      const st = why ? `<span class="cs">${WHY[why]}</span>` : mk.p ? '<span class="cs done">✓ 댓글</span>' : mk.o ? '<span class="cs">열어봄</span>' : '';
+      const who = it.nick || it.blogName || it.blogId;
+      const tool = why === 'hidden' ? `<button class="hb" data-act="cmtUnhide" data-b="${esc(it.blogId)}" title="이 블로그를 다시 목록에 보이기">다시 보이기</button>`
+        : `<button class="hb" data-act="cmtHide" data-b="${esc(it.blogId)}" title="이 블로그 글은 앞으로 목록에서 빼기">숨기기</button>`;
+      return `<li class="ci ${mk.p || why ? 'dim' : ''}" data-act="cmtOpen" data-src="${src}" data-i="${i}" title="새 탭에서 글을 열고 댓글창으로 이동해 댓글을 복사합니다">
+        <div class="ct">${esc(it.title || '(제목 없음)')}</div><div class="cm"><a class="home" href="https://blog.naver.com/${esc(it.blogId)}" target="_blank" rel="noopener" title="${esc(who)} 블로그로 가기">${esc(who)} ↗</a>${it.at ? `<span>· ${esc(ago(it.at))}</span>` : ''}${st}${tool}<b class="go">💬</b></div></li>`;
+    }).join('')}</ol>` : '';
+    if (skipped) h += `<button class="lnk skipnote" data-act="cmtShowHidden">${S.cmt.showHidden ? '뺀 글 다시 감추기' : `댓글을 달 수 없는 공식 블로그·숨긴 블로그 글 ${skipped}개를 뺐어요 · 보기`}</button>`;
+    return h;
   }
   function cmtView() {
     const C = S.cmt;
@@ -630,6 +652,10 @@
           <div class="note">이웃새글 화면의 글 옆 <b>💬 댓글</b> 버튼으로도 똑같이 쓸 수 있어요.</div>
           <button class="lnk" data-act="cmtDiag" title="불러오지 못한 이유를 복사해 개발자에게 보내 주세요">불러오기 진단 복사</button></div>`;
       } else if (!B.items.length) h += `<div class="empty">${B.loading ? '이웃 새 글을 불러오는 중…' : '이웃 새 글이 없어요.'}</div>`;
+      else if (!S.cmt.showHidden && B.items.every((it) => skipWhy(it))) {
+        h += `<div class="empty">이번에 불러온 글은 모두 공식·숨긴 블로그 글이에요.</div>` + itemList(B.items, 'buddy');
+        if (B.more) h += `<button class="btn ghost" data-act="cmtMore">${B.loading ? '불러오는 중…' : '더 보기'}</button>`;
+      }
       else {
         h += itemList(B.items, 'buddy');
         if (B.more) h += `<button class="btn ghost" data-act="cmtMore">${B.loading ? '불러오는 중…' : '더 보기'}</button>`;
@@ -729,6 +755,7 @@
   window.addEventListener('resize', () => applyPos());
 
   root.addEventListener('click', (e) => {
+    if (e.target.closest('a.home')) return; // 블로거 이름: 그 블로그를 새 탭으로(글 열기·댓글 준비는 하지 않음)
     const t = e.target.closest('[data-act], [data-tab]');
     if (!t) return;
     if (t.dataset.tab) {
@@ -754,6 +781,9 @@
     else if (act === 'cmtSearch') { const qi = root.querySelector('.q'); if (qi) S.cmt.search.q = qi.value; runSearch(); }
     else if (act === 'cmtOpen') openItem(t.dataset.src === 'search' ? S.cmt.search.items : S.cmt.buddy.items, Number(t.dataset.i), t.dataset.src === 'search' ? 'other' : 'buddy');
     else if (act === 'cmtHere') chrome.runtime.sendMessage({ type: 'nbx-cmt-here' }).catch(() => {});
+    else if (act === 'cmtHide') setHidden(t.dataset.b, true);
+    else if (act === 'cmtUnhide') setHidden(t.dataset.b, false);
+    else if (act === 'cmtShowHidden') { S.cmt.showHidden = !S.cmt.showHidden; render(); }
     else if (act === 'cmtDiag') {
       const text = JSON.stringify({ tool: 'toyblock-feed', version: chrome.runtime.getManifest().version, error: S.cmt.buddy.error, detail: S.cmt.buddy.detail }, null, 1);
       chrome.runtime.sendMessage({ type: 'nbx-cmt-copy', text }).then((r) => flash(r && r.ok ? '진단 정보가 복사됐어요. 개발자에게 붙여 보내 주세요.' : '복사하지 못했어요.')).catch(() => {});
@@ -771,7 +801,7 @@
   });
   function openCmt() {
     render();
-    if (!S.cmt.started) { S.cmt.started = true; loadBuddy(false); } else refreshMarks();
+    if (!S.cmt.started) { S.cmt.started = true; loadHidden().then(() => loadBuddy(false)); } else refreshMarks();
   }
   // 댓글을 달고 이 탭으로 돌아오면 표시를 새로 고칩니다
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.open && S.tab === 'cmt') refreshMarks(); });
@@ -948,6 +978,9 @@ details{margin-top:8px}summary{cursor:pointer;font-size:12px;color:#027a38;font-
 .cm span:first-child{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cs{color:#6b7280;background:#f0f2f5;border-radius:6px;padding:0 5px;white-space:nowrap}.cs.done{color:#027a38;background:#e9f8ef;font-weight:700}
 .go{font-size:12px}
+.cm .home{color:#4b5563;text-decoration:none;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cm .home:hover{color:#027a38;text-decoration:underline}
+.cm .hb{all:unset;cursor:pointer;font-size:10.5px;color:#9aa3ae;padding:0 4px;border-radius:5px;margin-left:auto}.cm .hb:hover{color:#b4234b;background:#fdecef}
+.cm .hb+.go{margin-left:4px}.skipnote{display:block;margin:2px 0 8px;font-size:11.5px}
 .flash{position:absolute;left:0;top:44px;width:300px;background:#333;color:#fff;border-radius:10px;padding:9px 12px;font-size:12px;box-shadow:0 6px 16px rgba(0,0,0,.2)}
 `;
   }

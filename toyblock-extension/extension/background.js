@@ -674,7 +674,8 @@ async function buddyFeed(page) {
       if (r.ok) {
         feedSource = src;
         const seen = new Set();
-        const items = r.items.filter((x) => { const k = x.blogId.toLowerCase() + '/' + x.logNo; if (seen.has(k)) return false; seen.add(k); return true; });
+        const items = r.items.filter((x) => { const k = x.blogId.toLowerCase() + '/' + x.logNo; if (seen.has(k)) return false; seen.add(k); return true; })
+          .map((x) => ({ ...x, official: NBX.isOfficialBlog(x) })); // 공식 블로그 표시(목록에서는 기본으로 뺌)
         return { ok: true, items, page: p, more: r.more, source: src };
       }
       errors.push(r.error);
@@ -713,7 +714,7 @@ async function searchPosts(q) {
     const bm = href.match(/^https?:\/\/(?:m\.)?blog\.naver\.com\/([A-Za-z0-9_-]{2,40})\/?(?:[?#]|$)/);
     if (bm && text && text.length <= 30 && !names[bm[1].toLowerCase()]) names[bm[1].toLowerCase()] = text;
   }
-  const list = [...items.values()].slice(0, 30).map(({ tp, ...it }) => ({ ...it, nick: names[it.blogId.toLowerCase()] || '' }));
+  const list = [...items.values()].slice(0, 30).map(({ tp, ...it }) => { const x = { ...it, nick: names[it.blogId.toLowerCase()] || '' }; x.official = NBX.isOfficialBlog(x); return x; });
   if (!list.length && !/검색결과가 없습니다|검색 결과가 없습니다/.test(html)) return { ok: false, error: 'unexpected-page' };
   return { ok: true, items: list };
 }

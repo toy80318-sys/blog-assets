@@ -1,12 +1,12 @@
 {
   "name": "토이블록 네이버 블로그 도우미",
-  "version": "1.8.1",
-  "released_at": "2026-10-28T07:29:23Z",
-  "notes": "· 제미나이 새 키(AQ.로 시작)를 알아보지 못하던 문제를 고쳤어요. 2026년 5월 28일부터 AI Studio에서 만드는 키는 모두 AQ.로 시작해요\n· 키 화면 안내 줄에 붙여 넣은 키는 모양이 낯설어도 그 회사 키로 받아 연결을 확인해요\n· 연결이 안 될 때 AI 회사가 알려 준 이유를 함께 보여 줘요",
+  "version": "1.9.0",
+  "released_at": "2026-10-28T07:50:07Z",
+  "notes": "· 이웃 새 글에서 댓글을 받지 않는 네이버 공식 블로그(네이버 검색·지식iN 등) 글을 뺐어요. 사람 블로그 글만 보여요\n· 블로거 이름을 누르면 그 블로그로 바로 가요. 원하지 않는 블로그는 '숨기기'로 뺄 수 있어요(뺀 글은 '보기'로 다시 확인)\n· 설치 방법 안내서를 실제 크롬 화면 캡처로 새로 만들었어요",
   "download_url": "https://github.com/toy80318-sys/blog-assets/raw/main/toyblock-extension/dist/toyblock-naver-blog-helper.zip",
   "guide_url": "https://github.com/toy80318-sys/blog-assets/blob/main/toyblock-extension/README.md#업데이트-방법",
   "store_url": "",
   "files_url": "https://raw.githubusercontent.com/toy80318-sys/blog-assets/main/toyblock-extension/dist/toyblock-extension-files.zip",
-  "files_sha256": "3b99204001747d0f0d746418d95a9266b065b3815e5ee2622904762ded5b6cdf",
-  "files_size": 141333
+  "files_sha256": "d3ef620682ac974646f43fdbdccd9c059bbcd86144ba1652e847182ff6a3b938",
+  "files_size": 144546
 }

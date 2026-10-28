@@ -150,6 +150,15 @@
     }
     return null;
   }
+  // 네이버 공식 블로그(서비스 안내용)는 대부분 댓글을 받지 않아 이웃 소통 목록에서 뺍니다(블로그 ID·이름으로 알아봄)
+  const OFFICIAL_IDS = new Set(['naver_search', 'blogpeople', 'naver_diary', 'naverblog', 'naver_kin', 'kin_official', 'naver_official', 'naverofficial', 'naver_shopping', 'naverpay', 'naver_webtoon', 'naver_map', 'naver_place', 'naver_cafe', 'naverwhale', 'clova_ai', 'naver_news', 'naver_mail', 'navercorp']);
+  const OFFICIAL_RE = /(^|\s)(네이버|NAVER)(\s|$)|^(네이버|NAVER)(검색|블로그|플레이스|쇼핑|페이|웹툰|지도|카페|메일|뉴스|공식|웨일|클로바|지식)|지식\s?iN|공식\s?블로그|official|\s(서비스|팀)$/i;
+  function isOfficialBlog(x) {
+    if (!x) return false;
+    const id = String(x.blogId || '').toLowerCase();
+    if (OFFICIAL_IDS.has(id) || /^naver_/.test(id)) return true;
+    return [x.nick, x.blogName].some((t) => typeof t === 'string' && OFFICIAL_RE.test(t.trim()));
+  }
   const maskKey = (k) => (typeof k === 'string' && k.length > 12 ? k.slice(0, 6) + '…' + k.slice(-4) : '');
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -237,6 +246,6 @@
     } catch (_) { return false; }
   }
 
-  g.NBX = { AI_PROVIDERS, PROVIDER_IDS, KEY_PROVIDERS, MODEL_RE, detectKey, maskKey, modelOf, PARTNER, applyRemote, remoteSelectors, FEATURES, QUOTE_STYLES, FONTS, SIZES, SLOT_COUNT, DEFAULTS, merge, clone, keyLabel, byId, emptyStyle, defaultKey,
+  g.NBX = { AI_PROVIDERS, PROVIDER_IDS, KEY_PROVIDERS, MODEL_RE, detectKey, maskKey, isOfficialBlog, modelOf, PARTNER, applyRemote, remoteSelectors, FEATURES, QUOTE_STYLES, FONTS, SIZES, SLOT_COUNT, DEFAULTS, merge, clone, keyLabel, byId, emptyStyle, defaultKey,
     VERSION: VER, world: IN_PAGE ? g.__nbxWorld : null, foreignCopy };
 })(globalThis);
