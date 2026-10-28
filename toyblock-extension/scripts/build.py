@@ -3,8 +3,9 @@
 
 만드는 것
   dist/toyblock-naver-blog-helper.zip   사용자용 압축 파일 (nbx 폴더 + 설치방법 + 아임웹 코드)
-  build/toyblock-extension-store.zip    크롬 웹스토어 업로드용 (manifest.json이 맨 위)
-  update/version.json                   확장 프로그램이 확인하는 최신 버전 정보
+  dist/toyblock-extension-files.zip     폴더 설치본의 '지금 업데이트'가 받아 바꿔 넣는 확장 파일(맨 위에 manifest.json)
+  build/toyblock-extension-store.zip    크롬 웹스토어 업로드용 (manifest.json이 맨 위, 폴더 설치본 전용 업데이트 파일 제외)
+  update/version.json                   확장 프로그램이 확인하는 최신 버전 정보(files_url · files_sha256 포함)
 
 같은 내용이면 zip이 바이트 단위로 같게 만들어(파일 시각 고정) 불필요한 커밋이 생기지 않게 합니다.
 """
@@ -21,6 +22,8 @@ BUILD = os.path.join(ROOT, 'build')
 UPDATE = os.path.join(ROOT, 'update')
 
 REPO = 'toy80318-sys/blog-assets'
+# 폴더 설치본에서만 쓰는 온라인 업데이트 화면: 웹스토어 버전은 크롬이 업데이트하므로 넣지 않습니다
+FOLDER_ONLY = {'update.html', 'update.js', 'selfupdate.js'}
 BRANCH = 'main'
 PKG_NAME = 'toyblock-naver-blog-helper'
 FIXED_TIME = (2026, 1, 1, 0, 0, 0)
@@ -64,7 +67,20 @@ def main():
     store_zip = os.path.join(BUILD, 'toyblock-extension-store.zip')
     with zipfile.ZipFile(store_zip, 'w') as z:
         for f in files_under(EXT):
+            rel = os.path.relpath(f, EXT).replace(os.sep, '/')
+            if rel in FOLDER_ONLY:
+                continue
+            add(z, f, rel)
+
+    # 1-2) 폴더 설치본 온라인 업데이트용: 확장 파일 전부(맨 위에 manifest.json)
+    files_tmp = os.path.join(BUILD, 'toyblock-extension-files.zip')
+    with zipfile.ZipFile(files_tmp, 'w') as z:
+        for f in files_under(EXT):
             add(z, f, os.path.relpath(f, EXT).replace(os.sep, '/'))
+    files_bytes = open(files_tmp, 'rb').read()
+    changed_files = write_if_changed(os.path.join(DIST, 'toyblock-extension-files.zip'), files_bytes)
+    import hashlib
+    files_sha = hashlib.sha256(files_bytes).hexdigest()
 
     # 2) 사용자용: toyblock-naver-blog-helper/nbx + 설치방법 + 아임웹 코드
     tmp = os.path.join(BUILD, PKG_NAME + '.zip')
@@ -99,6 +115,9 @@ def main():
         'download_url': f'https://github.com/{REPO}/raw/{BRANCH}/toyblock-extension/dist/{PKG_NAME}.zip',
         'guide_url': f'https://github.com/{REPO}/blob/{BRANCH}/toyblock-extension/README.md#업데이트-방법',
         'store_url': store.get('store_url', ''),
+        'files_url': f'https://raw.githubusercontent.com/{REPO}/{BRANCH}/toyblock-extension/dist/toyblock-extension-files.zip',
+        'files_sha256': files_sha,
+        'files_size': len(files_bytes),
     }
     changed_ver = write_if_changed(vpath, (json.dumps(info, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
 
@@ -114,7 +133,7 @@ def main():
             print('makensis가 없어 설치 프로그램은 건너뜁니다')
 
     print(f'version={version}')
-    print(f'package_changed={str(changed_zip).lower()}')
+    print(f'package_changed={str(changed_zip or changed_files).lower()}')
     print(f'version_json_changed={str(changed_ver).lower()}')
     print(f'setup_changed={str(changed_setup).lower()}')
     print(f'store_zip={store_zip}')

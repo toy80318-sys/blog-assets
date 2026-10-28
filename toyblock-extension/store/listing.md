@@ -34,7 +34,8 @@
 ■ 이웃 소통 댓글 도우미
 · 이웃 새 글·키워드 노출 글 목록, 네이버 검색·이웃새글 화면의 💬 댓글 버튼
 · 누르면 새 탭에서 댓글 입력칸으로 이동하고, 그 글의 제목·소제목·본문과 닉네임을 조합한 댓글 초안 3개를 만들어 1번을 클립보드에 복사
-· 제미나이·클로드·GPT(사용자 API 키) 또는 키 없이 짧은 인사 댓글 조합(닉네임님 + 칭찬 + 감사 인사 + 눈웃음)
+· 제미나이·클로드·GPT·OpenRouter(사용자 API 키) 또는 키 없이 짧은 인사 댓글 조합(닉네임님 + 칭찬 + 감사 인사 + 눈웃음)
+· AI 키 쉽게 연결: 키 화면에서 복사만 누르면 자동 연결, OpenRouter는 로그인만으로 연결, 붙여 넣은 키는 회사를 자동으로 알아봄
 · 등록은 사용자가 직접 읽고 고쳐서 누릅니다(자동 등록 없음)
 
 ■ 블로그 점수 가이드
@@ -54,18 +55,20 @@
 | declarativeNetRequestWithHostAccess | 확장이 네이버 이웃 피드를 불러올 때 그 요청에만 네이버 이웃 피드 화면 주소(Referer)를 붙입니다. 확장 자신의 요청에만 적용되며 다른 사이트·요청은 바꾸지 않습니다. |
 | offscreen | 댓글 초안을 클립보드에 복사하기 위한 보이지 않는 문서를 엽니다(CLIPBOARD 용도). |
 | clipboardWrite | 사용자가 연 글의 댓글 초안을 클립보드에 넣어, 댓글 입력칸에 붙여 넣기만 하면 되게 합니다. |
-| 선택 호스트: generativelanguage.googleapis.com, api.anthropic.com, api.openai.com | 사용자가 설정에서 AI를 고르고 "연결 확인"을 누를 때만 요청합니다. 사용자의 API 키로 댓글 초안을 만들 때 씁니다. |
+| 선택 호스트: generativelanguage.googleapis.com, api.anthropic.com, api.openai.com, openrouter.ai | 사용자가 설정에서 AI를 고르거나 "연결 확인"·"키 받으러 가기"·"로그인하고 바로 연결"을 누를 때만 요청합니다. 사용자의 API 키로 댓글 초안을 만들 때 씁니다. |
+| 선택 호스트: aistudio.google.com, platform.claude.com, console.anthropic.com, platform.openai.com | 사용자가 "키 받으러 가기"를 누를 때만 요청합니다. 그 버튼으로 연 키 만들기 탭에만 안내 줄을 띄우고, 사용자가 키를 복사하거나 안내 줄에 붙여 넣으면 키 모양(AIza…, sk-…)인 글만 확장의 키 보관함에 저장합니다. 다른 탭·다른 내용은 읽지 않습니다. |
+| identity | OpenRouter "로그인하고 바로 연결"에서 chrome.identity.launchWebAuthFlow로 OpenRouter 로그인 창을 열고, 사용자가 허용하면 돌려받은 코드로 사용자의 API 키를 받습니다(OAuth PKCE). 구글 계정 정보는 쓰지 않습니다. |
 | alarms | 1시간마다 최신 버전 정보와 온라인 설정(네이버 에디터 버튼 이름)을 확인합니다. 새 버전이 보이면 크롬에 업데이트 확인(runtime.requestUpdateCheck)을 요청합니다. |
 | scripting | 확장이 설치·업데이트된 직후, 이미 열려 있던 네이버 블로그·검색 탭에 패키지 안의 같은 콘텐츠 스크립트를 넣어 새로고침 없이 바로 쓰게 합니다. 패키지 밖의 코드는 넣지 않습니다. |
 | 호스트: blog.naver.com, *.blog.naver.com | 글쓰기 화면에 단축키·버튼을 붙이고, 블로그 화면에 분석 패널을 띄우며, 공개 블로그 정보(방문자·글 목록)를 읽습니다. |
 | 호스트: search.naver.com | 사용자가 "노출 확인"이나 이웃 소통의 키워드 검색을 할 때 네이버 블로그 검색 결과를 읽고, 검색 화면의 글 옆에 💬 댓글 버튼을 붙입니다. |
 
 ## 원격 코드 사용 여부
-사용하지 않습니다. 확장이 내려받는 것은 최신 버전 번호와 버튼 이름 같은 JSON 데이터뿐이며, 실행 코드는 모두 패키지 안에 들어 있습니다.
+사용하지 않습니다. 확장이 내려받는 것은 최신 버전 번호와 버튼 이름 같은 JSON 데이터뿐이며, 실행 코드는 모두 패키지 안에 들어 있습니다. (웹스토어 패키지에는 폴더 설치본 전용 업데이트 화면 update.html·update.js·selfupdate.js를 넣지 않습니다. 웹스토어 버전의 업데이트는 크롬이 합니다.)
 
 ## 데이터 사용 (Privacy practices)
 · 수집하는 사용자 데이터: 없음(개발자 서버로 보내는 데이터 없음)
-· 사용자가 AI를 켠 경우에만, 사용자가 연 글의 제목·소제목·본문 일부와 블로거 닉네임을 사용자가 고른 AI 회사(Google·Anthropic·OpenAI)에 사용자의 API 키로 보내 댓글 초안을 받습니다
+· 사용자가 AI를 켠 경우에만, 사용자가 연 글의 제목·소제목·본문 일부와 블로거 닉네임을 사용자가 고른 AI 회사(Google·Anthropic·OpenAI·OpenRouter)에 사용자의 API 키로 보내 댓글 초안을 받습니다
 · 판매·제3자 제공: 없음
 · 개인정보처리방침: https://github.com/toy80318-sys/blog-assets/blob/main/toyblock-extension/store/privacy.md
 

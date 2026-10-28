@@ -114,8 +114,8 @@
     popupExtras: ['colorRed', 'colorBlue'],
     // 이웃 소통 · 댓글 도우미
     cmt: {
-      provider: 'gemini', // gemini | claude | openai | template(키 없이 템플릿만)
-      models: { gemini: '', claude: '', openai: '' }, // 비어 있으면 기본 모델
+      provider: 'gemini', // gemini | claude | openai | openrouter | template(키 없이 템플릿만)
+      models: { gemini: '', claude: '', openai: '', openrouter: '' }, // 비어 있으면 기본 모델
       callName: true,   // 블로거 닉네임을 "○○님"으로 부르기
       prefill: false,   // 복사와 함께 댓글 입력칸에 바로 채우기
       prefetch: false,  // 목록의 다음 글 댓글을 미리 만들어 두기
@@ -124,14 +124,33 @@
     }
   };
 
-  // 댓글 초안을 만드는 AI — 키는 사용자 크롬(chrome.storage.local)에만 저장합니다
+  // 댓글 초안을 만드는 AI — 키는 사용자 크롬(확장 전용 보관함)에만 저장합니다
+  // console: 키를 만드는 화면 주소(키 받기 도우미가 이 화면에 안내 줄을 띄우고, 복사한 키를 바로 알아봅니다)
+  // keyRe: 키 모양(붙여 넣거나 복사한 글에서 어떤 AI 키인지 알아볼 때 씀)
   const AI_PROVIDERS = {
-    gemini: { label: '제미나이', model: 'gemini-3.5-flash-lite', origin: 'https://generativelanguage.googleapis.com/*', keyUrl: 'https://aistudio.google.com/apikey', keyHint: 'Google AI Studio에서 무료로 받을 수 있습니다' },
-    claude: { label: '클로드', model: 'claude-haiku-5-5', origin: 'https://api.anthropic.com/*', keyUrl: 'https://platform.claude.com/docs/ko/get-api-key', keyHint: 'Claude Console의 Settings → API keys에서 만듭니다' },
-    openai: { label: 'GPT', model: 'gpt-5-mini', origin: 'https://api.openai.com/*', keyUrl: 'https://platform.openai.com/api-keys', keyHint: 'OpenAI 플랫폼의 API keys에서 만듭니다' }
+    gemini: { label: '제미나이', model: 'gemini-3.5-flash-lite', origin: 'https://generativelanguage.googleapis.com/*', keyUrl: 'https://aistudio.google.com/apikey', keyHint: 'Google AI Studio에서 무료로 받을 수 있습니다(카드 등록 없음)',
+      console: ['https://aistudio.google.com/*'], keyRe: /AIza[0-9A-Za-z_\-]{35}/, free: true },
+    claude: { label: '클로드', model: 'claude-haiku-5-5', origin: 'https://api.anthropic.com/*', keyUrl: 'https://platform.claude.com/settings/keys', keyHint: 'Claude Console의 API keys에서 만듭니다(결제 크레딧 필요)',
+      console: ['https://platform.claude.com/*', 'https://console.anthropic.com/*'], keyRe: /sk-ant-api\d{2}-[A-Za-z0-9_\-]{20,250}/ },
+    openai: { label: 'GPT', model: 'gpt-5-mini', origin: 'https://api.openai.com/*', keyUrl: 'https://platform.openai.com/api-keys', keyHint: 'OpenAI 플랫폼의 API keys에서 만듭니다(결제 등록 필요)',
+      console: ['https://platform.openai.com/*'], keyRe: /sk-(?:proj|svcacct)-[A-Za-z0-9_\-]{20,300}|sk-(?!ant-|or-)[A-Za-z0-9]{32,200}/ },
+    openrouter: { label: 'OpenRouter', model: 'openrouter/free', origin: 'https://openrouter.ai/*', keyUrl: 'https://openrouter.ai/keys', keyHint: '로그인만 하면 키가 자동으로 만들어집니다(무료 모델은 하루 50회)',
+      console: ['https://openrouter.ai/*'], keyRe: /sk-or-v1-[0-9a-f]{64}/, oauth: true }
   };
-  const PROVIDER_IDS = ['gemini', 'claude', 'openai', 'template'];
-  const MODEL_RE = /^[A-Za-z0-9._:\-]{2,80}$/;
+  const PROVIDER_IDS = ['gemini', 'claude', 'openai', 'openrouter', 'template'];
+  const KEY_PROVIDERS = ['gemini', 'claude', 'openai', 'openrouter'];
+  const MODEL_RE = /^[A-Za-z0-9._:\-\/]{2,100}$/;
+  // 글 안에서 AI 키를 찾아 어떤 회사 키인지 알려 줍니다(앞뒤 따옴표·공백은 무시). OpenRouter·클로드 키도 sk-로 시작하므로 그 둘을 먼저 봅니다
+  function detectKey(text) {
+    const t = typeof text === 'string' ? text.slice(0, 5000) : '';
+    if (!t) return null;
+    for (const id of ['openrouter', 'claude', 'openai', 'gemini']) {
+      const m = t.match(AI_PROVIDERS[id].keyRe);
+      if (m) return { provider: id, key: m[0] };
+    }
+    return null;
+  }
+  const maskKey = (k) => (typeof k === 'string' && k.length > 12 ? k.slice(0, 6) + '…' + k.slice(-4) : '');
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
@@ -218,6 +237,6 @@
     } catch (_) { return false; }
   }
 
-  g.NBX = { AI_PROVIDERS, PROVIDER_IDS, MODEL_RE, modelOf, PARTNER, applyRemote, remoteSelectors, FEATURES, QUOTE_STYLES, FONTS, SIZES, SLOT_COUNT, DEFAULTS, merge, clone, keyLabel, byId, emptyStyle, defaultKey,
+  g.NBX = { AI_PROVIDERS, PROVIDER_IDS, KEY_PROVIDERS, MODEL_RE, detectKey, maskKey, modelOf, PARTNER, applyRemote, remoteSelectors, FEATURES, QUOTE_STYLES, FONTS, SIZES, SLOT_COUNT, DEFAULTS, merge, clone, keyLabel, byId, emptyStyle, defaultKey,
     VERSION: VER, world: IN_PAGE ? g.__nbxWorld : null, foreignCopy };
 })(globalThis);

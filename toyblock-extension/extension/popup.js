@@ -64,6 +64,25 @@ $('#dump').addEventListener('click', async () => {
 });
 
 // ── 업데이트 안내
+// '지금 업데이트': 웹스토어 설치본은 크롬에 바로 확인을 요청하고(받으면 곧바로 적용), 폴더 설치본은 업데이트 화면을 엽니다
+function updButton(text, just) {
+  const btn = document.createElement('button');
+  btn.className = 'primary';
+  btn.textContent = text;
+  btn.addEventListener('click', async () => {
+    btn.disabled = true; btn.textContent = '업데이트하는 중…';
+    const r = await chrome.runtime.sendMessage({ type: 'nbx-update-now' }).catch(() => null);
+    if (r && r.mode === 'store') {
+      const st = r.info && r.info.store && r.info.store.status;
+      renderUpdate(r.info, just);
+      const note = document.createElement('p');
+      note.textContent = st === 'update_available' ? '받는 중이에요 — 곧 자동으로 적용돼요.' : st === 'throttled' ? '크롬이 방금 확인했어요. 몇 분 안에 자동으로 적용돼요.' : '아직 웹스토어에 올라오지 않았어요. 심사가 끝나면 자동으로 적용돼요.';
+      $('#upd').append(note);
+    } else if (r && r.mode === 'folder') window.close();
+    else { btn.disabled = false; btn.textContent = text; }
+  });
+  return btn;
+}
 function renderUpdate(u, just) {
   const box = $('#upd'), ver = $('#ver');
   const cur = chrome.runtime.getManifest().version;
@@ -81,17 +100,22 @@ function renderUpdate(u, just) {
     const b = document.createElement('b'); b.textContent = `새 버전 v${u.store.version || u.latest}을 받는 중이에요`;
     const p = document.createElement('p'); p.textContent = '받는 대로 바로 적용돼요. 열려 있는 블로그 탭에도 새로고침 없이 반영돼요.';
     box.append(b, p);
+  } else if (store && u && u.store && u.latest && u.latest !== cur) {
+    // 웹스토어 설치본인데 GitHub에는 새 버전이 있는 경우: 버튼으로 크롬에 바로 확인을 요청합니다
+    box.className = 'upd';
+    const b = document.createElement('b'); b.textContent = `새 버전 v${u.latest}이 나왔어요`;
+    const p = document.createElement('p'); p.textContent = u.store.status === 'throttled' ? '크롬이 곧 받아서 자동으로 적용해요. 지금 받으려면 아래 버튼을 눌러 주세요.' : '웹스토어 심사가 끝나는 대로 자동으로 적용돼요. 아래 버튼으로 지금 확인할 수 있어요.';
+    box.append(b, p, updButton('지금 업데이트', just));
   } else if (u && u.available) {
     box.className = 'upd';
     const b = document.createElement('b'); b.textContent = `새 버전 v${u.latest}이 나왔습니다`;
     const p = document.createElement('p'); p.textContent = u.notes || '기능이 개선된 새 버전입니다.';
-    box.append(b, p);
-    if (u.storeUrl) {
-      const q = document.createElement('p'); q.textContent = '웹스토어 버전으로 옮기면 다음부터는 받을 필요 없이 자동으로 바로 업데이트돼요.';
-      box.append(q, link('웹스토어 버전으로 옮기기', chrome.runtime.getURL('options.html#move')));
-    }
-    if (u.downloadUrl) box.append(link('새 버전 받기 (zip)', u.downloadUrl, !!u.storeUrl));
-    if (u.guideUrl) box.append(link('업데이트 방법 보기', u.guideUrl, true));
+    box.append(b, p, updButton(`v${u.latest}으로 지금 업데이트`, just));
+    const q = document.createElement('p'); q.textContent = '버튼을 누르면 새 파일을 받아 바로 바꿔 넣어요. 처음 한 번만 설치 폴더(nbx)를 골라 주세요.';
+    q.style.marginTop = '6px';
+    box.append(q);
+    if (u.storeUrl) box.append(link('웹스토어 버전으로 옮기기', chrome.runtime.getURL('options.html#move'), true));
+    if (u.downloadUrl) box.append(link('zip으로 직접 받기', u.downloadUrl, true));
   } else if (u && !store && u.storeUrl) {
     box.className = 'upd ok';
     const b = document.createElement('b'); b.textContent = '자동 업데이트를 받으려면';

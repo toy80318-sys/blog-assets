@@ -23,7 +23,7 @@
   }
   async function setAll(v) {
     const clean = {};
-    Object.entries(v || {}).forEach(([k, x]) => { if (/^(gemini|claude|openai)$/.test(k) && typeof x === 'string' && x.trim()) clean[k] = x.trim().slice(0, 300); });
+    Object.entries(v || {}).forEach(([k, x]) => { if (/^(gemini|claude|openai|openrouter)$/.test(k) && typeof x === 'string' && x.trim()) clean[k] = x.trim().slice(0, 300); });
     const db = await open();
     try {
       await new Promise((res, rej) => {

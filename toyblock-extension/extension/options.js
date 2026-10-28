@@ -174,6 +174,12 @@ function renderGeneral() {
 
 // ── 이웃 소통 · 댓글 도우미 ──
 let AIKEYS = {};
+// AI 키 쉽게 연결: 연결되면 저장소에서 설정·키를 다시 읽어 화면을 맞춥니다
+NBXKeyConnect.mount($('#keyConnect'), {
+  beforeSave: () => { clearTimeout(keyTimer); return flush(); },
+  onSaved: async () => { AIKEYS = await NBXKeys.getAll().catch(() => AIKEYS); await load(); },
+  pasteTargets: [$('#aiKey')]
+});
 // 키는 확장 전용 보관함(IndexedDB)에 둡니다 — 네이버 화면의 스크립트는 읽을 수 없습니다
 NBXKeys.getAll().then((k) => { AIKEYS = k || {}; renderCmt(); }).catch(() => {});
 function renderCmt() {
@@ -336,10 +342,14 @@ async function renderUpd(u) {
   let type = u && u.installType;
   if (!type) { try { type = (await chrome.management.getSelf()).installType; } catch (_) { type = ''; } }
   const store = type === 'normal';
-  let txt = `지금 버전 v${cur} · ` + (store ? '웹스토어 설치 — 새 버전이 나오면 자동으로 바로 적용돼요' : '폴더 설치 — 자동 업데이트가 되지 않아요');
+  let txt = `지금 버전 v${cur} · ` + (store ? '웹스토어 설치 — 새 버전이 나오면 자동으로 바로 적용돼요' : '폴더 설치');
   if (u && u.latest) txt += u.latest === cur || !u.available ? ` · 최신 v${u.latest}` : ` · 새 버전 v${u.latest} 있음`;
   if (store && u && u.store && u.store.status === 'update_available') txt += ' · 새 버전을 받는 중이에요';
   $('#updState').textContent = txt;
+  $('#updHow').textContent = store ? '지금 업데이트를 누르면 크롬에 새 버전을 바로 확인해 달라고 요청해요. 받는 즉시 적용돼요.'
+    : '지금 업데이트를 누르면 새 파일을 받아 설치 폴더에 바로 바꿔 넣고 적용해요. 처음 한 번만 설치 폴더(nbx)를 골라 주세요.';
+  const newer = u && u.latest && (u.available || (u.store && u.store.status === 'update_available'));
+  $('#updNow').textContent = newer ? `v${u.latest}으로 지금 업데이트` : '지금 업데이트';
   $('#moveBox').style.display = store ? 'none' : 'flex';
   const url = u && u.storeUrl;
   $('#storeLink').style.display = url ? 'block' : 'none';
@@ -347,6 +357,21 @@ async function renderUpd(u) {
   $('#storeSoon').style.display = url ? 'none' : 'block';
 }
 chrome.storage.local.get('nbxUpdate').then((r) => renderUpd(r.nbxUpdate));
+const verGt = (a, b) => { const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number); for (let i = 0; i < 4; i++) { const d = (pa[i] || 0) - (pb[i] || 0); if (d) return d > 0; } return false; };
+$('#updNow').addEventListener('click', async () => {
+  const b = $('#updNow');
+  b.disabled = true;
+  const r = await chrome.runtime.sendMessage({ type: 'nbx-update-now' }).catch(() => null);
+  b.disabled = false;
+  if (r && r.mode === 'store') {
+    renderUpd(r.info);
+    const st = r.info && r.info.store && r.info.store.status;
+    $('#updHow').textContent = st === 'update_available' ? '새 버전을 받는 중이에요. 받는 대로 바로 적용돼요.'
+      : st === 'throttled' ? '크롬이 방금 확인했어요. 몇 분 안에 자동으로 받아 적용해요.'
+      : r.info && r.info.latest && verGt(r.info.latest, chrome.runtime.getManifest().version) ? '새 버전이 웹스토어 심사 중이에요. 끝나면 자동으로 적용돼요(보통 1~3일).'
+      : '최신 버전이에요.';
+  }
+});
 $('#updCheck').addEventListener('click', async () => {
   $('#updCheck').textContent = '확인 중…';
   const u = await chrome.runtime.sendMessage({ type: 'nbx-check-update' }).catch(() => null);

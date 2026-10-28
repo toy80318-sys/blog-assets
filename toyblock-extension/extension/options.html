@@ -75,10 +75,12 @@
 
   <h2 id="cmt">이웃 소통 · 댓글 도우미</h2>
   <p class="desc">블로그 화면 왼쪽 패널의 <b>이웃 소통</b> 탭이나 네이버 검색·이웃새글 화면의 <b>💬 댓글</b> 버튼으로 글을 열면, 새 탭에서 댓글창으로 이동하고 그 글의 제목·소제목·본문과 블로거 닉네임을 조합한 댓글이 클립보드에 복사돼 있습니다. 댓글창에 붙여 넣고 고친 뒤 <b>등록은 직접</b> 눌러 주세요.</p>
+  <div id="keyConnect"></div>
   <div class="opt" style="flex-wrap:wrap"><b style="font-size:13px">댓글 만드는 방법</b>
     <label><input type="radio" name="cmtProvider" value="gemini"> 제미나이 (기본)</label>
     <label><input type="radio" name="cmtProvider" value="claude"> 클로드</label>
     <label><input type="radio" name="cmtProvider" value="openai"> GPT</label>
+    <label><input type="radio" name="cmtProvider" value="openrouter"> OpenRouter</label>
     <label><input type="radio" name="cmtProvider" value="template"> 템플릿만 (키 없이)</label>
   </div>
   <div id="aiBox" class="aibox">
@@ -126,10 +128,12 @@
 
   <h2 id="move">업데이트 · 설정 옮기기</h2>
   <div class="opt" style="flex-wrap:wrap"><span id="updState" style="font-size:13px"></span>
+    <button type="button" id="updNow" style="padding:6px 12px;border-radius:7px;border:1px solid #03a94d;background:#03a94d;color:#fff;cursor:pointer;font:inherit;font-size:12.5px;font-weight:700">지금 업데이트</button>
     <button type="button" id="updCheck" style="padding:4px 10px;border-radius:7px;border:1px solid #cfd4da;background:#fff;cursor:pointer;font:inherit;font-size:12.5px">업데이트 확인</button></div>
+  <p class="desc" id="updHow"></p>
   <div id="moveBox" class="opt" style="display:none;flex-direction:column;align-items:stretch;gap:6px;padding:12px 14px;border-radius:10px;background:#fff7f9;border:1px solid #f5c2cc">
-    <b style="color:#b4234b">웹스토어 버전으로 옮기면 다음부터 자동으로 업데이트돼요</b>
-    <span class="fdesc" style="line-height:1.7">지금은 폴더로 설치한 버전이라 새 버전이 나오면 직접 받아 덮어써야 해요. 웹스토어 버전은 새 버전이 나오면 크롬이 바로 받아 적용하고, 열려 있는 블로그 탭에도 새로고침 없이 반영돼요.<br>
+    <b style="color:#b4234b">웹스토어 버전으로 옮기면 버튼도 누를 필요 없어요</b>
+    <span class="fdesc" style="line-height:1.7">폴더 설치본도 위 <b>지금 업데이트</b> 버튼으로 바로 업데이트돼요. 웹스토어 버전은 새 버전이 나오면 크롬이 알아서 받아 적용하고, 열려 있는 블로그 탭에도 새로고침 없이 반영돼요.<br>
     ① 아래 <b>설정 백업 코드 복사</b> → ② 웹스토어에서 토이블록 설치 → ③ 새로 설치한 토이블록 설정 화면의 <b>설정 불러오기</b>에 붙여 넣기 → ④ <b>chrome://extensions</b>에서 이 폴더 설치본 삭제(둘 다 켜 두면 단축키가 두 번 실행돼요)</span>
     <a id="storeLink" target="_blank" rel="noopener" style="display:none;text-align:center;padding:8px;border-radius:8px;background:#e8547a;color:#fff;text-decoration:none;font-weight:700">웹스토어에서 토이블록 설치</a>
     <span id="storeSoon" class="fdesc" style="display:none">웹스토어 등록을 준비 중이에요. 등록되면 이 자리에 설치 버튼이 나타나요.</span>
@@ -148,6 +152,7 @@
 </div>
 <script src="features.js"></script>
 <script src="keystore.js"></script>
+<script src="keyconnect.js"></script>
 <script src="options.js"></script>
 </body>
 </html>

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>토이블록 시작하기</title>
+<style>
+  :root { --g: #03a94d; --line: #e3e6ea; --sub: #6b7280; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f5f6f8; color: #1f2328; font: 14px/1.6 -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+  .wrap { max-width: 680px; margin: 32px auto; padding: 0 16px; }
+  .hero { background: var(--g); color: #fff; border-radius: 18px; padding: 24px 26px; }
+  .hero small { font-weight: 700; opacity: .9; } .hero h1 { margin: 4px 0 6px; font-size: 24px; } .hero p { margin: 0; opacity: .95; }
+  .step { background: #fff; border-radius: 16px; padding: 18px 20px; margin-top: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.04); }
+  .step h2 { display: flex; align-items: center; gap: 10px; font-size: 16px; margin: 0 0 6px; }
+  .num { display: inline-flex; width: 26px; height: 26px; border-radius: 50%; background: #e9f8ef; color: #027a38; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; }
+  .step.ok .num { background: var(--g); color: #fff; }
+  .state { margin-left: auto; font-size: 12.5px; font-weight: 700; color: #b26a00; }
+  .step.ok .state { color: #027a38; }
+  .step p { margin: 0; color: #3d4550; font-size: 13.5px; }
+  .pin { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 8px; font-size: 13px; }
+  .pin kbd { background: #f1f3f5; border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; font: inherit; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .btns a, .btns button { text-decoration: none; font: inherit; font-weight: 700; font-size: 13.5px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--g); background: var(--g); color: #fff; cursor: pointer; }
+  .btns .sub { background: #fff; color: #027a38; }
+  .foot { color: var(--sub); font-size: 12px; text-align: center; margin: 18px 0 30px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero"><small>토이블록 네이버 블로그 도우미</small><h1>설치 완료! 세 가지만 하면 끝나요</h1><p>소제목·인용구 단축키, 블로그 분석, 이웃 댓글 도우미를 바로 쓸 수 있어요.</p></div>
+
+  <div class="step" id="s1"><h2><span class="num">1</span>툴바에 고정하기<span class="state" id="pinState">확인 중…</span></h2>
+    <p>아이콘이 보이면 업데이트·설정을 한 번에 열 수 있어요.</p>
+    <div class="pin">주소창 오른쪽 <kbd>🧩 퍼즐 모양</kbd> → <kbd>토이블록 네이버 블로그 도우미</kbd> 옆 <kbd>📌 고정</kbd></div></div>
+
+  <div class="step" id="s2"><h2><span class="num">2</span>AI 댓글 연결 <span style="font-weight:400;font-size:12.5px;color:#6b7280">(선택)</span><span class="state" id="aiState"></span></h2>
+    <div id="keyConnect"></div></div>
+
+  <div class="step" id="s3"><h2><span class="num">3</span>블로그에서 써 보기</h2>
+    <p>글쓰기 화면에서 <b>Ctrl+Shift+1</b>(엔터+소제목), <b>Ctrl+Shift+2</b>(인용구)를 눌러 보세요. 블로그 화면 왼쪽에는 분석 패널과 이웃 소통 탭이 생겨요.</p>
+    <div class="btns"><a href="https://blog.naver.com/GoBlogWrite.naver" target="_blank" rel="noopener">블로그 글쓰기 열기</a><button type="button" class="sub" id="opt">단축키 · 댓글 설정</button></div></div>
+
+  <p class="foot">새 버전이 나오면 아이콘의 <b>지금 업데이트</b> 버튼 하나로 바로 적용돼요.</p>
+</div>
+<script src="features.js"></script>
+<script src="keystore.js"></script>
+<script src="keyconnect.js"></script>
+<script src="welcome.js"></script>
+</body>
+</html>

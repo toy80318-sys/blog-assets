@@ -121,8 +121,35 @@ async function handleInstalled(d) {
     if (d.reason === 'update' && d.previousVersion && d.previousVersion !== to) chrome.storage.local.set({ nbxJustUpdated: { from: d.previousVersion, to, at: Date.now() } }).catch(() => {});
     chrome.storage.local.remove('nbxApplying').catch(() => {});
     await reinjectAll().catch(() => 0);
+    // 폴더 설치본을 '지금 업데이트'로 바꿔 넣은 직후: 결과 화면을 다시 엽니다(적용하는 동안 그 화면이 닫히므로)
+    // 크롬이 이것을 '업데이트'가 아닌 '설치'로 알릴 때도 있어 두 경우 모두 기록으로 판단합니다
+    const r = await chrome.storage.local.get('nbxSelfUpdate').catch(() => ({}));
+    const su = r && r.nbxSelfUpdate;
+    if (su && Date.now() - (su.at || 0) < 5 * 60e3 && su.to === to) {
+      await chrome.storage.local.remove('nbxSelfUpdate').catch(() => {});
+      await chrome.storage.local.set({ nbxJustUpdated: { from: su.from, to, at: Date.now() } }).catch(() => {});
+      chrome.tabs.create({ url: chrome.runtime.getURL('update.html#done') }).catch(() => {});
+    } else if (d.reason === 'install') {
+      // 처음 설치: 시작 안내(툴바 고정 · AI 키 연결 · 블로그 열기)를 엽니다
+      chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html') }).catch(() => {});
+    }
   }
   checkUpdate();
+}
+
+// '지금 업데이트' 버튼
+// · 웹스토어 설치본: 크롬에 바로 새 버전을 확인해 달라고 하고, 받는 즉시 적용합니다(onUpdateAvailable → reload)
+// · 폴더 설치본: 업데이트 화면을 열어 설치 폴더에 새 파일을 써 넣고 다시 불러옵니다(처음 한 번만 폴더를 고릅니다)
+async function updateNow() {
+  const type = await installType();
+  if (type === 'normal') {
+    const info = await checkUpdate();
+    if (!info.store) info.store = await askStore();
+    await chrome.storage.local.set({ nbxUpdate: info });
+    return { mode: 'store', info };
+  }
+  await chrome.tabs.create({ url: chrome.runtime.getURL('update.html?go=1') });
+  return { mode: 'folder' };
 }
 chrome.runtime.onInstalled.addListener(handleInstalled);
 chrome.runtime.onStartup.addListener(() => { chrome.alarms.create('nbx-update', { periodInMinutes: CHECK_EVERY_MIN, delayInMinutes: 1 }); checkUpdate(); });
@@ -166,6 +193,10 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
   }
   if (msg.type === 'nbx-check-update') {
     checkUpdate().then(send, (e) => send({ error: String(e) }));
+    return true;
+  }
+  if (msg.type === 'nbx-update-now') {
+    updateNow().then(send, (e) => send({ error: String((e && e.message) || e) }));
     return true;
   }
   if (msg.type === 'nbx-open-options') {
@@ -320,9 +351,12 @@ async function copyText(text) {
 function aiError(status, msg) {
   const m = cleanStr(msg, 120);
   if (status === 400 && /api key|api_key|key not valid|invalid.*key/i.test(m)) return 'API 키를 확인해 주세요';
+  if (status === 400 && /not scoped to a workspace|anthropic-workspace-id/i.test(m)) return '이 클로드 키는 워크스페이스가 정해지지 않았어요 — 키를 만들 때 워크스페이스(Default)를 골라 다시 만들어 주세요';
   if (status === 400) return '요청이 거절됐어요' + (m ? ' — ' + m : '');
+  if (status === 402) return '크레딧이 부족해요 — 무료 모델을 쓰거나 크레딧을 충전해 주세요';
   if (status === 401 || status === 403) return 'API 키를 확인해 주세요';
   if (status === 404) return '모델 이름을 확인해 주세요';
+  if (status === 429 && /free|per-day|daily/i.test(m)) return '무료 사용 한도(하루 횟수)에 걸렸어요. 내일 다시 쓰거나 다른 AI를 골라 주세요';
   if (status === 429) return '사용 한도에 걸렸어요. 잠시 후 다시 시도해 주세요';
   if (status >= 500) return 'AI 서버가 잠시 응답하지 않아요';
   return 'HTTP ' + status;
@@ -379,7 +413,26 @@ async function callAI(provider, apiKey, model, system, user) {
     catch (e) { if (!reasoning || !retryPlain(e)) throw e; j = await postJson('https://api.openai.com/v1/chat/completions', { Authorization: 'Bearer ' + apiKey }, body(false)); }
     return (j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
   }
+  if (provider === 'openrouter') {
+    // OpenAI와 같은 형식. 무료 모델마다 받는 설정이 달라 JSON 형식 지정 없이 보내고, 생각(<think>) 부분은 지웁니다
+    const j = await postJson('https://openrouter.ai/api/v1/chat/completions', { Authorization: 'Bearer ' + apiKey, 'HTTP-Referer': 'https://github.com/toy80318-sys/blog-assets', 'X-Title': 'ToyBlock Naver Blog Helper' }, {
+      model, max_tokens: 1200, temperature: 0.9,
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }]
+    });
+    const t = (j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+    return String(t).replace(/<think>[\s\S]*?<\/think>/gi, '');
+  }
   throw new Error('알 수 없는 AI');
+}
+// OpenRouter 기본 모델: 한국어를 잘 쓰는 무료 모델이 지금 있으면 그것을, 없으면 무료 모델 자동 배정(openrouter/free)
+const OR_PREFER = ['google/gemma-4-31b-it:free', 'qwen/qwen3.8-27b:free', 'google/gemma-3-27b-it:free', 'meta-llama/llama-3.3-70b-instruct:free', 'openrouter/free'];
+async function pickOpenRouterModel() {
+  try {
+    const r = await fetch('https://openrouter.ai/api/v1/models', { credentials: 'omit', cache: 'no-store' });
+    const j = await r.json();
+    const ids = new Set(((j && j.data) || []).map((m) => m && m.id).filter((x) => typeof x === 'string'));
+    return OR_PREFER.find((id) => ids.has(id)) || 'openrouter/free';
+  } catch (_) { return 'openrouter/free'; }
 }
 async function aiDrafts(provider, apiKey, model, post, cmt) {
   const p = NBXC.buildPrompt(post, { callName: cmt.callName, style: cmt.style });
@@ -718,6 +771,105 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
     case 'nbx-cmt-search': return typeof msg.q === 'string' && msg.q.trim() ? run(searchPosts(msg.q.trim())) : false;
     case 'nbx-cmt-log': return run(cmtLogFor(msg.keys));
     case 'nbx-ai-test': return run(aiTest(msg.provider));
+    default: return false;
+  }
+});
+
+// ───────────── AI 키 쉽게 연결 ─────────────
+// · 키 받기 도우미: 키 만드는 화면(AI Studio 등)을 새 탭으로 열고 그 화면 위에 안내 줄을 띄웁니다.
+//   키 옆 '복사'를 누르거나 안내 줄에 붙여 넣으면 키를 알아보고 저장한 뒤 바로 연결을 확인합니다.
+// · 어디에 붙여 넣은 키든 모양으로 어느 회사 키인지 알아봅니다(제미나이 AIza…, 클로드 sk-ant-…, GPT sk-…, OpenRouter sk-or-…).
+// 키는 확장 전용 보관함에만 두며, 키 화면과 네이버 화면의 스크립트는 읽을 수 없습니다.
+const pageMatches = (url, pats) => typeof url === 'string' && (pats || []).some((p) => toRe(p).test(url));
+async function helperTabs() { const r = await chrome.storage.session.get('nbxKeyTabs').catch(() => ({})); return (r && r.nbxKeyTabs) || {}; }
+async function setHelperTab(tabId, v) {
+  const m = await helperTabs();
+  if (v) m[tabId] = v; else if (m[tabId]) delete m[tabId]; else return;
+  await chrome.storage.session.set({ nbxKeyTabs: m }).catch(() => {});
+}
+// 안내 줄에 넣을 내용(회사마다 버튼 이름이 달라 단계 안내를 따로 둡니다)
+const KEY_STEPS = {
+  gemini: ['오른쪽 위 <b>API 키 만들기(Create API key)</b>를 누르세요', '프로젝트는 처음 나오는 것 그대로 두고 만들기를 누르세요', '만들어진 키 옆 <b>복사</b> 버튼을 누르면 토이블록이 바로 알아보고 연결해요'],
+  claude: ['<b>Create key</b>를 누르고 이름에 토이블록을 적으세요', '만료(Expiration)는 <b>Never</b>, 워크스페이스는 <b>Default</b>를 고르세요', '만든 키의 <b>Copy</b>를 누르면 토이블록이 바로 알아보고 연결해요 · 결제 크레딧이 있어야 써요'],
+  openai: ['<b>+ Create new secret key</b>를 누르세요', '이름에 토이블록을 적고 <b>Create secret key</b>를 누르세요', '나온 키의 <b>Copy</b>를 누르면 토이블록이 바로 알아보고 연결해요 · 결제 등록이 있어야 써요'],
+  openrouter: ['<b>Create API Key</b>를 누르세요', '이름에 토이블록을 적고 만들기를 누르세요', '나온 키를 복사하면 토이블록이 바로 알아보고 연결해요 · 무료 모델은 하루 50회']
+};
+async function openKeyHelper(provider) {
+  const info = NBX.AI_PROVIDERS[provider];
+  if (!info || !info.console) return { ok: false, error: '알 수 없는 AI' };
+  const tab = await chrome.tabs.create({ url: info.keyUrl });
+  await setHelperTab(tab.id, { provider, at: Date.now() });
+  return { ok: true, tabId: tab.id };
+}
+async function injectHelper(tabId, url) {
+  const h = (await helperTabs())[tabId];
+  const info = h && NBX.AI_PROVIDERS[h.provider];
+  if (!info || !pageMatches(url, info.console)) return false;
+  const target = { tabId };
+  const cfg = { provider: h.provider, label: info.label, steps: KEY_STEPS[h.provider] || [], re: Object.fromEntries(NBX.KEY_PROVIDERS.map((p) => [p, NBX.AI_PROVIDERS[p].keyRe.source])) };
+  try {
+    await chrome.scripting.executeScript({ target, func: (c) => { globalThis.__nbxKeyCfg = c; }, args: [cfg] });
+    await chrome.scripting.executeScript({ target, files: ['keyhelper.js'] });
+    await chrome.scripting.executeScript({ target, world: 'MAIN', files: ['keyhook.js'] });
+    return true;
+  } catch (_) { return false; } // 키 화면 접근을 허용하지 않았으면 안내 줄 없이 키 화면만 열립니다
+}
+chrome.tabs.onUpdated.addListener((tabId, ch, tab) => {
+  if (ch.status !== 'complete' || !tab || !tab.url) return;
+  helperTabs().then((m) => { if (m[tabId]) injectHelper(tabId, tab.url); });
+});
+chrome.tabs.onRemoved.addListener((tabId) => { setHelperTab(tabId, null); });
+
+let keyQ = Promise.resolve();
+// 키를 저장하고 그 AI를 댓글 AI로 고른 뒤 연결을 확인합니다(한 번에 하나씩)
+function saveKey(text, want) {
+  const p = keyQ.then(async () => {
+    const found = NBX.detectKey(text);
+    let provider = found && found.provider, key = found && found.key;
+    // 모양으로 못 알아본 키는, 어느 AI 키인지 정해 준 경우에만 그대로 받습니다
+    if (!found && NBX.KEY_PROVIDERS.includes(want)) { const t = String(text || '').trim().replace(/^["'\s]+|["'\s]+$/g, ''); if (/^[A-Za-z0-9._\-]{20,300}$/.test(t)) { provider = want; key = t; } }
+    if (!provider) return { ok: false, error: 'AI 키 모양이 아니에요. 키 전체를 복사했는지 확인해 주세요' };
+    const all = await getKeys();
+    const same = all[provider] === key;
+    all[provider] = key;
+    await NBXKeys.setAll(all);
+    const s = await getSettings();
+    s.cmt.provider = provider;
+    if (provider === 'openrouter' && !s.cmt.models.openrouter) s.cmt.models.openrouter = await pickOpenRouterModel();
+    await chrome.storage.sync.set({ nbx: s });
+    const test = await aiTest(provider);
+    const info = NBX.AI_PROVIDERS[provider];
+    const ev = { provider, label: info.label, masked: NBX.maskKey(key), same, ok: !!test.ok, error: test.error || '', at: Date.now() };
+    await chrome.storage.local.set({ nbxKeyEvent: ev }).catch(() => {});
+    return { ok: true, ...ev, test };
+  });
+  keyQ = p.catch(() => {});
+  return p;
+}
+chrome.runtime.onMessage.addListener((msg, sender, send) => {
+  if (sender.id !== chrome.runtime.id || !msg || typeof msg.type !== 'string' || !msg.type.startsWith('nbx-key-')) return false;
+  const run = (p) => { p.then(send, (e) => send({ ok: false, error: String((e && e.message) || e) })); return true; };
+  const fromExtPage = typeof sender.url === 'string' && sender.url.startsWith(chrome.runtime.getURL(''));
+  switch (msg.type) {
+    case 'nbx-key-helper-open': return fromExtPage ? run(openKeyHelper(msg.provider)) : false;
+    case 'nbx-key-save': return fromExtPage && typeof msg.text === 'string' ? run(saveKey(msg.text, msg.provider)) : false;
+    case 'nbx-key-pick-model': return fromExtPage ? run(pickOpenRouterModel().then((model) => ({ ok: true, model }))) : false;
+    case 'nbx-key-found': {
+      // 키 화면의 안내 줄에서 온 것만 받습니다(도우미로 연 탭 + 그 회사 키 화면 주소)
+      const tabId = sender.tab && sender.tab.id;
+      if (tabId == null || typeof msg.text !== 'string') return false;
+      return run(helperTabs().then((m) => {
+        const h = m[tabId];
+        const info = h && NBX.AI_PROVIDERS[h.provider];
+        if (!info || !pageMatches(sender.url || (sender.tab && sender.tab.url), info.console)) return { ok: false, error: '키 받기 도우미로 연 화면이 아니에요' };
+        return saveKey(msg.text.slice(0, 5000), h.provider);
+      }));
+    }
+    case 'nbx-key-helper-close': {
+      const tabId = sender.tab && sender.tab.id;
+      if (tabId == null) return false;
+      return run(helperTabs().then(async (m) => { if (m[tabId]) { await chrome.tabs.remove(tabId).catch(() => {}); } return { ok: true }; }));
+    }
     default: return false;
   }
 });
