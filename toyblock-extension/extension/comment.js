@@ -3,10 +3,13 @@
 // · 네이버 검색 · 이웃새글 화면: 블로그 글 옆에 💬 댓글 버튼을 붙입니다.
 // 등록 버튼은 항상 사용자가 직접 누릅니다.
 (() => {
-  if (window.__nbxCmt) return;
-  window.__nbxCmt = true;
   const NBX = globalThis.NBX;
   if (!NBX) return;
+  const W = NBX.world; // 이 버전의 실행 공간 — 새 버전이 들어오면 W.dead가 되고 버튼·카드를 거둡니다
+  if (window.__nbxCmt && window.__nbxCmt === W) return;
+  window.__nbxCmt = W || true;
+  const own = (el) => (W ? W.own(el) : el);
+  const seen = new WeakSet(); // 이미 살펴본 링크(버전마다 따로)
   const IS_MAC = /Mac/i.test(navigator.platform);
   const PASTE = IS_MAC ? '⌘V' : 'Ctrl+V';
   const CSS = `
@@ -144,12 +147,12 @@
     function scan() {
       const fresh = [];
       for (const a of document.querySelectorAll('a[href*="blog.naver.com"]')) {
-        if (a.__nbxSeen || a.closest('.nbx-cbtn')) continue;
+        if (seen.has(a) || a.closest('.nbx-cbtn')) continue;
         const p = parse(a.href);
-        if (!p) { a.__nbxSeen = true; continue; }
+        if (!p) { seen.add(a); continue; }
         const text = clean(a.innerText || a.textContent);
         if (text.length < 4) continue; // 썸네일·짧은 링크(글자가 나중에 채워질 수 있어 표시만 미룹니다)
-        a.__nbxSeen = true;
+        seen.add(a);
         const key = p.blogId.toLowerCase() + '/' + p.logNo;
         const old = done.get(key);
         if (old && old.isConnected) continue;
@@ -157,7 +160,8 @@
         const n = retry.get(key) || 0;
         if (n >= 5) continue;
         retry.set(key, n + 1);
-        const b = document.createElement('button');
+        if (W && W.dead) return;
+        const b = own(document.createElement('button'));
         b.type = 'button';
         b.className = 'nbx-cbtn';
         b.textContent = '💬 댓글';
@@ -328,7 +332,9 @@
     const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
     function ensureCard() {
       if (hostEl && hostEl.isConnected) return;
-      hostEl = hostDoc.createElement('div');
+      if (W && W.dead) return;
+      hostEl = own(hostDoc.createElement('div'));
+      if (W) { const h = hostEl; W.onRetire(() => h.remove()); } // 위쪽 문서에 붙인 카드도 거둡니다
       hostEl.id = 'nbx-cmt-host';
       root = hostEl.attachShadow({ mode: 'open' });
       root.innerHTML = `<style>${CSS}</style><div class="card"><div class="hd" data-a="expand"><b>💬 토이블록 댓글 도우미</b><span><button class="x" data-a="min" title="접기">—</button><button class="x" data-a="close" title="닫기">✕</button></span></div><div class="st"></div><div class="note"></div><div class="list"></div><div class="tools"><button data-a="regen">↻ 다시 만들기</button><button data-a="tpl">템플릿으로</button></div><div class="ft"><span class="stats"></span><span class="links"><button class="lk" data-a="diag">진단 정보 복사</button><button class="lk" data-a="settings">설정</button></span></div></div><div class="toast"></div>`;

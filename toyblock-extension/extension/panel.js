@@ -1,12 +1,13 @@
 // 토이블록 네이버 블로그 도우미 — 블로그 분석 패널 (채널 분석 · 포스트 분석 · 검색 노출)
 (() => {
-  if (window.top !== window || window.__nbxPanel) return;
+  const NBX = globalThis.NBX;
+  if (!NBX) return;
+  const W = NBX.world; // 이 버전의 실행 공간 — 새 버전이 들어오면 W.dead가 되고 패널을 거둡니다
+  if (window.top !== window || (window.__nbxPanel && window.__nbxPanel === W)) return;
   if (!/(^|\.)blog\.naver\.com$/.test(location.hostname)) return;
   // 글쓰기 화면에서는 에디터를 가리지 않도록 패널을 띄우지 않습니다
   if (/Redirect=Write|\/postwrite|PostWriteForm|PostUpdateForm|Redirect=Update/i.test(location.href)) return;
-  window.__nbxPanel = true;
-
-  const NBX = globalThis.NBX;
+  window.__nbxPanel = W || true;
   const API = 'https://m.blog.naver.com/api/blogs/';
   const DAY = 864e5;
   const WD = ['일', '월', '화', '수', '목', '금', '토'];
@@ -337,6 +338,7 @@
 
   // ───────────── 화면 ─────────────
   const hostEl = document.createElement('div');
+  if (W) { W.own(hostEl); W.onRetire(() => hostEl.remove()); }
   hostEl.id = 'nbx-panel-host';
   const root = hostEl.attachShadow({ mode: 'open' });
   root.innerHTML = `<style>${CSS()}</style><div class="wrap"></div>`;
@@ -649,6 +651,7 @@
   }
 
   function render() {
+    if (W && W.dead) { hostEl.remove(); return; }
     if (!settings.showPanel || !S.blogId) { hostEl.remove(); return; }
     if (S.composing) { S.renderLater = true; return; } // 한글 입력 중에는 다시 그리지 않습니다
     if (!hostEl.isConnected) (document.body || document.documentElement).appendChild(hostEl);
@@ -774,10 +777,11 @@
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.open && S.tab === 'cmt') refreshMarks(); });
 
   // 블로그 안에서 다른 글로 이동하면(안쪽 프레임 이동) 포스트 분석을 새로 합니다
+  const watched = new WeakSet();
   function watchFrame() {
     const f = document.getElementById('mainFrame');
-    if (!f || f.__nbxWatch) return;
-    f.__nbxWatch = true;
+    if (!f || watched.has(f)) return;
+    watched.add(f);
     f.addEventListener('load', () => {
       const id = currentBlogId();
       if (id && id !== S.blogId) { S.blogId = id; S.channel = null; S.expo = null; S.postExpo = null; }

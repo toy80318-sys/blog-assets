@@ -64,32 +64,54 @@ $('#dump').addEventListener('click', async () => {
 });
 
 // ── 업데이트 안내
-function renderUpdate(u) {
+function renderUpdate(u, just) {
   const box = $('#upd'), ver = $('#ver');
   const cur = chrome.runtime.getManifest().version;
+  const store = u && u.installType === 'normal';
   box.innerHTML = '';
-  if (u && u.available) {
+  box.className = '';
+  const link = (text, href, sub) => { const a = document.createElement('a'); a.href = href; a.target = '_blank'; a.textContent = text; if (sub) a.className = 'sub'; return a; };
+  if (just && just.to === cur && Date.now() - (just.at || 0) < 3 * 864e5) {
+    box.className = 'upd ok';
+    const b = document.createElement('b'); b.textContent = `v${just.from} → v${cur} 자동 업데이트됐어요`;
+    box.append(b);
+    if (u && u.notes && u.latest === cur) { const p = document.createElement('p'); p.textContent = u.notes; box.append(p); }
+  } else if (store && u && u.store && u.store.status === 'update_available') {
+    box.className = 'upd ok';
+    const b = document.createElement('b'); b.textContent = `새 버전 v${u.store.version || u.latest}을 받는 중이에요`;
+    const p = document.createElement('p'); p.textContent = '받는 대로 바로 적용돼요. 열려 있는 블로그 탭에도 새로고침 없이 반영돼요.';
+    box.append(b, p);
+  } else if (u && u.available) {
     box.className = 'upd';
     const b = document.createElement('b'); b.textContent = `새 버전 v${u.latest}이 나왔습니다`;
     const p = document.createElement('p'); p.textContent = u.notes || '기능이 개선된 새 버전입니다.';
     box.append(b, p);
-    if (u.downloadUrl) { const a = document.createElement('a'); a.href = u.downloadUrl; a.target = '_blank'; a.textContent = '새 버전 받기 (zip)'; box.append(a); }
-    if (u.guideUrl) { const a = document.createElement('a'); a.href = u.guideUrl; a.target = '_blank'; a.className = 'sub'; a.textContent = '업데이트 방법 보기'; box.append(a); }
-  } else box.className = '';
+    if (u.storeUrl) {
+      const q = document.createElement('p'); q.textContent = '웹스토어 버전으로 옮기면 다음부터는 받을 필요 없이 자동으로 바로 업데이트돼요.';
+      box.append(q, link('웹스토어 버전으로 옮기기', chrome.runtime.getURL('options.html#move')));
+    }
+    if (u.downloadUrl) box.append(link('새 버전 받기 (zip)', u.downloadUrl, !!u.storeUrl));
+    if (u.guideUrl) box.append(link('업데이트 방법 보기', u.guideUrl, true));
+  } else if (u && !store && u.storeUrl) {
+    box.className = 'upd ok';
+    const b = document.createElement('b'); b.textContent = '자동 업데이트를 받으려면';
+    const p = document.createElement('p'); p.textContent = '웹스토어 버전으로 옮기면 새 버전이 나올 때 크롬이 바로 적용해 줘요. 설정은 백업 코드로 그대로 옮겨져요.';
+    box.append(b, p, link('웹스토어 버전으로 옮기기', chrome.runtime.getURL('options.html#move')));
+  }
   ver.textContent = '';
   const t = document.createElement('span');
-  t.textContent = u && u.installType === 'normal' ? `v${cur} · 웹스토어 자동 업데이트 사용 중 ` : u && u.latest && !u.available ? `v${cur} · 최신 버전입니다 ` : `v${cur} `;
+  t.textContent = store ? `v${cur} · 자동 업데이트 켜짐 ` : u && u.latest && !u.available ? `v${cur} · 최신 버전입니다 ` : `v${cur} `;
   const btn = document.createElement('button'); btn.textContent = '업데이트 확인';
-  btn.addEventListener('click', async () => { btn.textContent = '확인 중…'; renderUpdate(await chrome.runtime.sendMessage({ type: 'nbx-check-update' })); });
+  btn.addEventListener('click', async () => { btn.textContent = '확인 중…'; renderUpdate(await chrome.runtime.sendMessage({ type: 'nbx-check-update' }), just); });
   ver.append(t, btn);
 }
-chrome.storage.local.get(['nbxUpdate', 'nbxRemote']).then(async (r) => {
+chrome.storage.local.get(['nbxUpdate', 'nbxRemote', 'nbxJustUpdated']).then(async (r) => {
   NBX.applyRemote(r.nbxRemote);
   $('#partner').href = NBX.PARTNER.url;
   let u = r.nbxUpdate;
-  renderUpdate(u);
-  // 3시간 넘게 확인하지 않았으면 지금 확인합니다
-  if (!u || Date.now() - (u.checkedAt || 0) > 3 * 3600e3) { u = await chrome.runtime.sendMessage({ type: 'nbx-check-update' }).catch(() => u); renderUpdate(u); }
+  renderUpdate(u, r.nbxJustUpdated);
+  // 30분 넘게 확인하지 않았으면 지금 확인합니다(웹스토어 설치본은 새 버전이 보이면 바로 받아 적용)
+  if (!u || Date.now() - (u.checkedAt || 0) > 30 * 60e3) { u = await chrome.runtime.sendMessage({ type: 'nbx-check-update' }).catch(() => u); renderUpdate(u, r.nbxJustUpdated); }
 });
 
 $('#partner').href = NBX.PARTNER.url;

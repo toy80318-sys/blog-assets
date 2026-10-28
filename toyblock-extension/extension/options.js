@@ -303,6 +303,73 @@ $('#reset').addEventListener('click', () => {
   render();
 });
 
+// ── 업데이트 · 설정 옮기기
+const LOCAL_KEEP = /^(nbxPanelPos|nbxCmtTpl|nbxCmtLog|nbxVisits:[a-z0-9_-]{1,40})$/;
+const b64enc = (str) => {
+  const u = new TextEncoder().encode(str);
+  let s = '';
+  for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+const b64dec = (s) => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)));
+async function makeBackup() {
+  const sync = await chrome.storage.sync.get('nbx');
+  const all = await chrome.storage.local.get(null);
+  const local = Object.fromEntries(Object.entries(all).filter(([k]) => LOCAL_KEEP.test(k)));
+  return 'TOYBLOCK1.' + b64enc(JSON.stringify({ v: 1, at: Date.now(), from: chrome.runtime.getManifest().version, nbx: sync.nbx || null, local }));
+}
+async function restoreBackup(code) {
+  const m = String(code || '').trim().match(/^TOYBLOCK1\.([A-Za-z0-9_-]+)$/);
+  if (!m) throw new Error('코드 형식이 달라요. TOYBLOCK1.로 시작하는 코드를 통째로 붙여 넣어 주세요.');
+  let d;
+  try { d = JSON.parse(b64dec(m[1])); } catch (_) { throw new Error('코드가 잘렸거나 바뀌었어요. 다시 복사해 붙여 넣어 주세요.'); }
+  if (!d || d.v !== 1) throw new Error('이 버전에서 읽을 수 없는 코드예요.');
+  const nbx = NBX.merge(d.nbx); // 형식이 맞는 값만 받아들입니다
+  const local = {};
+  for (const [k, v] of Object.entries(d.local && typeof d.local === 'object' ? d.local : {})) if (LOCAL_KEEP.test(k) && v != null && JSON.stringify(v).length < 500000) local[k] = v;
+  await chrome.storage.sync.set({ nbx });
+  if (Object.keys(local).length) await chrome.storage.local.set(local);
+  return { visits: Object.keys(local).filter((k) => k.startsWith('nbxVisits:')).length };
+}
+async function renderUpd(u) {
+  const cur = chrome.runtime.getManifest().version;
+  let type = u && u.installType;
+  if (!type) { try { type = (await chrome.management.getSelf()).installType; } catch (_) { type = ''; } }
+  const store = type === 'normal';
+  let txt = `지금 버전 v${cur} · ` + (store ? '웹스토어 설치 — 새 버전이 나오면 자동으로 바로 적용돼요' : '폴더 설치 — 자동 업데이트가 되지 않아요');
+  if (u && u.latest) txt += u.latest === cur || !u.available ? ` · 최신 v${u.latest}` : ` · 새 버전 v${u.latest} 있음`;
+  if (store && u && u.store && u.store.status === 'update_available') txt += ' · 새 버전을 받는 중이에요';
+  $('#updState').textContent = txt;
+  $('#moveBox').style.display = store ? 'none' : 'flex';
+  const url = u && u.storeUrl;
+  $('#storeLink').style.display = url ? 'block' : 'none';
+  if (url) $('#storeLink').href = url;
+  $('#storeSoon').style.display = url ? 'none' : 'block';
+}
+chrome.storage.local.get('nbxUpdate').then((r) => renderUpd(r.nbxUpdate));
+$('#updCheck').addEventListener('click', async () => {
+  $('#updCheck').textContent = '확인 중…';
+  const u = await chrome.runtime.sendMessage({ type: 'nbx-check-update' }).catch(() => null);
+  $('#updCheck').textContent = '업데이트 확인';
+  renderUpd(u);
+});
+$('#backupCopy').addEventListener('click', async () => {
+  const code = await makeBackup();
+  try { await navigator.clipboard.writeText(code); $('#saved').style.color = ''; $('#saved').textContent = '설정 백업 코드를 복사했어요. 새로 설치한 토이블록의 설정 불러오기에 붙여 넣으세요.'; }
+  catch (_) { $('#restoreCode').value = code; $('#saved').textContent = '복사가 막혀 아래 칸에 코드를 넣어 두었어요. 직접 복사해 주세요.'; }
+  setTimeout(() => ($('#saved').textContent = ''), 4000);
+});
+$('#restoreBtn').addEventListener('click', async () => {
+  const msg = $('#restoreMsg');
+  try {
+    const r = await restoreBackup($('#restoreCode').value);
+    msg.style.color = '#027a38';
+    msg.textContent = `설정을 불러왔어요${r.visits ? ` (방문자 기록 ${r.visits}개 블로그 포함)` : ''}. 화면을 새로 고칩니다…`;
+    setTimeout(() => location.reload(), 1200);
+  } catch (e) { msg.style.color = '#b4234b'; msg.textContent = e.message; }
+});
+if (location.hash === '#move') setTimeout(() => document.getElementById('move').scrollIntoView(), 50);
+
 $('#partner').href = NBX.PARTNER.url;
 $('#disc').textContent = NBX.PARTNER.disclosure;
 

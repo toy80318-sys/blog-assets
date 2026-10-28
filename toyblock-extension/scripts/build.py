@@ -81,6 +81,9 @@ def main():
     notes_path = os.path.join(UPDATE, 'notes.txt')
     notes = open(notes_path, encoding='utf-8').read().strip() if os.path.exists(notes_path) else ''
     released = prev.get('released_at') if prev.get('version') == version else datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    # 웹스토어 주소(등록 뒤 update/store.json에 적으면 폴더 설치본이 '웹스토어로 옮기기' 안내를 띄웁니다)
+    store_path = os.path.join(UPDATE, 'store.json')
+    store = json.load(open(store_path, encoding='utf-8')) if os.path.exists(store_path) else {}
     info = {
         'name': manifest['name'],
         'version': version,
@@ -88,6 +91,7 @@ def main():
         'notes': notes,
         'download_url': f'https://github.com/{REPO}/raw/{BRANCH}/toyblock-extension/dist/{PKG_NAME}.zip',
         'guide_url': f'https://github.com/{REPO}/blob/{BRANCH}/toyblock-extension/README.md#업데이트-방법',
+        'store_url': store.get('store_url', ''),
     }
     changed_ver = write_if_changed(vpath, (json.dumps(info, ensure_ascii=False, indent=2) + '\n').encode('utf-8'))
 

@@ -23,13 +23,15 @@ async function searchBlog(query) {
 }
 
 // ───────────── 온라인 업데이트 확인 · 원격 설정(데이터만) ─────────────
-// GitHub에 올라간 최신 버전 정보를 확인해, 새 버전이 있으면 아이콘에 표시하고 다운로드 링크를 알려 줍니다.
-// 크롬 웹스토어에서 설치한 경우에는 크롬이 알아서 업데이트하므로 표시만 생략합니다.
+// GitHub에 올라간 최신 버전 정보를 1시간마다 확인합니다.
+// · 크롬 웹스토어 설치본: 새 버전이 보이면 크롬에 바로 업데이트 확인을 요청하고, 받는 즉시 적용합니다(다운로드·재설치 없음).
+//   적용되면 열려 있는 블로그 탭에 새 코드를 넣어, 새로고침 없이 계속 쓸 수 있게 합니다.
+// · 폴더(압축 해제) 설치본: 크롬이 코드를 바꿔 주지 않으므로 아이콘에 표시하고, 웹스토어 버전으로 옮기는 방법을 안내합니다.
 // 원격 설정은 네이버 버튼 이름 같은 "데이터"만 받으며, 실행 코드는 받지 않습니다.
 const REPO_RAW = 'https://raw.githubusercontent.com/toy80318-sys/blog-assets/main/toyblock-extension/update/';
 const UPDATE_URL = REPO_RAW + 'version.json';
 const CONFIG_URL = REPO_RAW + 'remote-config.json';
-const CHECK_EVERY_MIN = 360; // 6시간
+const CHECK_EVERY_MIN = 60; // 1시간
 
 const cmpVer = (a, b) => {
   const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0), pb = String(b).split('.').map((n) => parseInt(n, 10) || 0);
@@ -56,8 +58,11 @@ async function checkUpdate() {
       info.releasedAt = typeof v.released_at === 'string' ? v.released_at : '';
       info.downloadUrl = /^https:\/\/(github\.com|raw\.githubusercontent\.com)\//.test(v.download_url || '') ? v.download_url : '';
       info.guideUrl = /^https:\/\//.test(v.guide_url || '') ? v.guide_url : '';
-      // 웹스토어 설치(normal)는 크롬이 자동 업데이트하므로 알림이 필요 없습니다
-      info.available = cmpVer(v.version, current) > 0 && type !== 'normal';
+      info.storeUrl = /^https:\/\/(chromewebstore\.google\.com|chrome\.google\.com\/webstore)\//.test(v.store_url || '') ? v.store_url : '';
+      const newer = cmpVer(v.version, current) > 0;
+      // 웹스토어 설치(normal)는 크롬에 바로 받아 달라고 요청하고, 폴더 설치본만 아이콘에 표시합니다
+      info.available = newer && type !== 'normal';
+      if (newer && type === 'normal') info.store = await askStore();
     }
   } catch (e) { info.error = String(e.message || e); }
   try {
@@ -72,7 +77,54 @@ async function checkUpdate() {
   } catch (_) {}
   return info;
 }
-chrome.runtime.onInstalled.addListener(() => { chrome.alarms.create('nbx-update', { periodInMinutes: CHECK_EVERY_MIN, delayInMinutes: 1 }); checkUpdate(); });
+// 웹스토어에 새 버전을 바로 확인해 달라고 요청합니다(너무 자주 부르면 크롬이 잠시 미룹니다: throttled)
+async function askStore() {
+  if (!chrome.runtime.requestUpdateCheck) return { status: 'unsupported', at: Date.now() };
+  try {
+    const r = await chrome.runtime.requestUpdateCheck();
+    return { status: (r && r.status) || 'unknown', version: (r && r.version) || '', at: Date.now() };
+  } catch (e) { return { status: 'error', error: String(e.message || e), at: Date.now() }; }
+}
+// 새 버전을 다 받으면 곧바로 적용합니다. 적용 뒤(onInstalled)에 열린 탭에 새 코드를 넣습니다.
+chrome.runtime.onUpdateAvailable.addListener((d) => {
+  chrome.storage.local.set({ nbxApplying: { version: d && d.version, at: Date.now() } }).catch(() => {}).finally(() => chrome.runtime.reload());
+});
+
+// 열려 있는 블로그·검색 탭에 지금 버전의 코드를 넣습니다(설치·업데이트 직후 — 새로고침 없이 바로 쓰도록)
+// 예전 버전 코드는 features.js의 장치로 스스로 물러나므로 두 번 실행되지 않습니다.
+const toRe = (pat) => new RegExp('^' + pat.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
+async function reinjectAll() {
+  const groups = (chrome.runtime.getManifest().content_scripts || []).map((c) => ({ ...c, re: c.matches.map(toRe) }));
+  const urls = [...new Set(groups.flatMap((c) => c.matches))];
+  let tabs = [];
+  try { tabs = await chrome.tabs.query({ url: urls }); } catch (_) { return 0; }
+  let n = 0;
+  for (const t of tabs) {
+    if (!t.id || t.discarded || !t.url) continue;
+    for (const c of groups) {
+      if (!c.re.some((r) => r.test(t.url))) continue;
+      const target = { tabId: t.id, allFrames: !!c.all_frames };
+      try {
+        if (c.css && c.css.length) await chrome.scripting.insertCSS({ target, files: c.css });
+        await chrome.scripting.executeScript({ target, files: c.js, injectImmediately: true });
+        n++;
+      } catch (_) { /* 접근할 수 없는 탭은 건너뜁니다 */ }
+    }
+  }
+  return n;
+}
+
+async function handleInstalled(d) {
+  chrome.alarms.create('nbx-update', { periodInMinutes: CHECK_EVERY_MIN, delayInMinutes: 1 });
+  if (d && (d.reason === 'update' || d.reason === 'install')) {
+    const to = chrome.runtime.getManifest().version;
+    if (d.reason === 'update' && d.previousVersion && d.previousVersion !== to) chrome.storage.local.set({ nbxJustUpdated: { from: d.previousVersion, to, at: Date.now() } }).catch(() => {});
+    chrome.storage.local.remove('nbxApplying').catch(() => {});
+    await reinjectAll().catch(() => 0);
+  }
+  checkUpdate();
+}
+chrome.runtime.onInstalled.addListener(handleInstalled);
 chrome.runtime.onStartup.addListener(() => { chrome.alarms.create('nbx-update', { periodInMinutes: CHECK_EVERY_MIN, delayInMinutes: 1 }); checkUpdate(); });
 chrome.alarms.onAlarm.addListener((a) => { if (a.name === 'nbx-update') checkUpdate(); });
 

@@ -124,6 +124,23 @@
   <p class="desc">소제목·인용구1·본문·볼드에 배정된 단축키를 누를 때 함께 적용할 글자 모양입니다. 고르면 바로 저장됩니다. 글자를 선택하지 않고 커서만 둔 상태면 그 문단 전체에 적용합니다. 글자색·배경색은 네이버 색상표에서 고른 색과 가장 가까운 칸으로 들어갑니다. 인용구 서식에는 네이버 에디터 제약상 취소선이 적용되지 않습니다.</p>
   <div id="styles"></div>
 
+  <h2 id="move">업데이트 · 설정 옮기기</h2>
+  <div class="opt" style="flex-wrap:wrap"><span id="updState" style="font-size:13px"></span>
+    <button type="button" id="updCheck" style="padding:4px 10px;border-radius:7px;border:1px solid #cfd4da;background:#fff;cursor:pointer;font:inherit;font-size:12.5px">업데이트 확인</button></div>
+  <div id="moveBox" class="opt" style="display:none;flex-direction:column;align-items:stretch;gap:6px;padding:12px 14px;border-radius:10px;background:#fff7f9;border:1px solid #f5c2cc">
+    <b style="color:#b4234b">웹스토어 버전으로 옮기면 다음부터 자동으로 업데이트돼요</b>
+    <span class="fdesc" style="line-height:1.7">지금은 폴더로 설치한 버전이라 새 버전이 나오면 직접 받아 덮어써야 해요. 웹스토어 버전은 새 버전이 나오면 크롬이 바로 받아 적용하고, 열려 있는 블로그 탭에도 새로고침 없이 반영돼요.<br>
+    ① 아래 <b>설정 백업 코드 복사</b> → ② 웹스토어에서 토이블록 설치 → ③ 새로 설치한 토이블록 설정 화면의 <b>설정 불러오기</b>에 붙여 넣기 → ④ <b>chrome://extensions</b>에서 이 폴더 설치본 삭제(둘 다 켜 두면 단축키가 두 번 실행돼요)</span>
+    <a id="storeLink" target="_blank" rel="noopener" style="display:none;text-align:center;padding:8px;border-radius:8px;background:#e8547a;color:#fff;text-decoration:none;font-weight:700">웹스토어에서 토이블록 설치</a>
+    <span id="storeSoon" class="fdesc" style="display:none">웹스토어 등록을 준비 중이에요. 등록되면 이 자리에 설치 버튼이 나타나요.</span>
+  </div>
+  <div class="opt" style="flex-wrap:wrap"><span style="font-size:13px">설정 백업</span>
+    <button type="button" id="backupCopy" style="padding:6px 10px;border-radius:7px;border:1px solid #03a94d;background:#fff;color:#027a38;cursor:pointer">설정 백업 코드 복사</button>
+    <span class="fdesc">단축키·글자 모양·화면 설정·패널 위치·방문자 기록·댓글 기록이 담겨요. AI 키는 담지 않아요.</span></div>
+  <div class="opt" style="flex-direction:column;align-items:stretch;gap:6px"><span style="font-size:13px">설정 불러오기</span>
+    <textarea id="restoreCode" rows="3" placeholder="복사해 둔 설정 백업 코드(TOYBLOCK1.로 시작)를 붙여 넣으세요" style="width:100%;font:12px/1.4 monospace;padding:6px 8px;border:1px solid #cfd4da;border-radius:7px;resize:vertical"></textarea>
+    <div><button type="button" id="restoreBtn" style="padding:6px 12px;border-radius:7px;border:1px solid #03a94d;background:#03a94d;color:#fff;cursor:pointer">설정 불러오기</button> <span id="restoreMsg" class="fdesc"></span></div></div>
+
   <button class="reset" id="reset">단축키 설정 초기화</button>
   <div class="saved" id="saved"></div>
   <a id="partner" target="_blank" rel="noopener sponsored" style="display:block;margin-top:14px;padding:12px 14px;border-radius:10px;text-decoration:none;background:linear-gradient(120deg,#fff7ec,#ffeeda);border:1px solid #f6d7b0;color:#3b2a14"><b style="display:block">🛒 쿠팡에서 오늘의 추천 상품 보기 →</b><span style="font-size:12px;color:#8a6a3f">블로그 작업 장비·생활용품 둘러보기</span></a>

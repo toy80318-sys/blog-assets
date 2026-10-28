@@ -19,6 +19,7 @@ on:
       - 'toyblock-extension/extension/**'
       - 'toyblock-extension/guide/**'
       - 'toyblock-extension/update/notes.txt'
+      - 'toyblock-extension/update/store.json'
       - 'toyblock-extension/scripts/**'
       - '.github/workflows/toyblock-extension.yml'
   workflow_dispatch:

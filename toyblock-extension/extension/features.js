@@ -1,6 +1,63 @@
 // 공통 기능 정의 — 옵션 페이지, 팝업, 콘텐츠 스크립트가 함께 사용합니다.
 (function (g) {
-  if (g.NBX) return; // 같은 페이지에 두 번 들어와도 한 번만 정의합니다
+  let VER = '';
+  try { VER = chrome.runtime.getManifest().version; } catch (_) { /* 시험 환경 */ }
+  // 웹페이지에 들어간 스크립트인지(설정 화면·백그라운드가 아닌지)
+  const IN_PAGE = typeof document !== 'undefined' && typeof location !== 'undefined' && /^(https?|about):$/.test(location.protocol);
+
+  // ── 업데이트 때 예전 코드가 물러나게 하는 장치 ──
+  // 확장이 새 버전으로 바뀌면 열려 있던 탭의 예전 코드는 연결이 끊긴 채 남습니다.
+  // 새 코드가 들어오면(또는 예전 코드가 연결이 끊긴 걸 알아채면) 예전 코드는 단축키·화면·타이머를 모두 거두고 물러납니다.
+  function alive() { try { return !!(chrome.runtime && chrome.runtime.id); } catch (_) { return false; } }
+  function makeWorld(ver) {
+    let rid = '';
+    try { rid = chrome.runtime.id || ''; } catch (_) {}
+    const tag = (rid || 'local').slice(0, 12);
+    const token = tag + ':' + ver + ':' + Math.random().toString(36).slice(2, 10);
+    const ac = new AbortController();
+    const w = { token, tag, version: ver, signal: ac.signal, dead: false, alive, _timers: new Set(), _observers: new Set(), _cleanups: [] };
+    w.onRetire = (fn) => { w._cleanups.push(fn); };
+    w.own = (el) => { if (el && el.setAttribute) el.setAttribute('data-nbx-owner', token); return el; };
+    w.retire = () => {
+      if (w.dead) return;
+      w.dead = true;
+      try { ac.abort(); } catch (_) {}
+      w._timers.forEach((t) => clearInterval(t));
+      w._observers.forEach((o) => { try { o.disconnect(); } catch (_) {} });
+      w._cleanups.forEach((f) => { try { f(); } catch (_) {} });
+      try { document.querySelectorAll('[data-nbx-owner="' + token + '"]').forEach((el) => el.remove()); } catch (_) {}
+    };
+    return w;
+  }
+  if (IN_PAGE) {
+    const cur = g.__nbxWorld;
+    const reuse = cur && !cur.dead && cur.version === VER && cur.alive();
+    if (!reuse) {
+      if (cur && !cur.dead) cur.retire();
+      const w = makeWorld(VER);
+      g.__nbxWorld = w;
+      // 이 세계(스크립트 실행 공간)에서 등록하는 이벤트·반복 타이머·감시자를 모두 이 버전에 묶어, 물러날 때 한꺼번에 거둡니다
+      const orig = g.__nbxOrig || { add: EventTarget.prototype.addEventListener, si: g.setInterval, obs: MutationObserver.prototype.observe };
+      g.__nbxOrig = orig;
+      EventTarget.prototype.addEventListener = function (type, fn, opt) {
+        const cw = g.__nbxWorld;
+        if (!cw || cw.dead) return orig.add.call(this, type, fn, opt);
+        let o = opt;
+        if (o == null || typeof o !== 'object') o = { capture: !!o, signal: cw.signal };
+        else if (!o.signal) o = Object.assign({}, o, { signal: cw.signal });
+        return orig.add.call(this, type, fn, o);
+      };
+      g.setInterval = function (...a) { const id = orig.si.apply(g, a); const cw = g.__nbxWorld; if (cw && !cw.dead) cw._timers.add(id); return id; };
+      MutationObserver.prototype.observe = function (...a) { const cw = g.__nbxWorld; if (cw && !cw.dead) cw._observers.add(this); return orig.obs.apply(this, a); };
+      // 다른 실행 공간에 남은 예전 코드에게 물러나라고 알립니다(같은 확장끼리만)
+      const evt = 'nbx-retire-' + w.tag;
+      orig.add.call(document, evt, () => { if (g.__nbxSending !== w.token) w.retire(); }, { signal: w.signal });
+      try { g.__nbxSending = w.token; document.dispatchEvent(new Event(evt)); } catch (_) {} finally { g.__nbxSending = null; }
+      // 연결이 끊긴 걸 알아채면 스스로 물러납니다
+      w._timers.add(orig.si.call(g, () => { if (!alive()) w.retire(); }, 2000));
+    }
+  }
+  if (g.NBX && g.NBX.VERSION === VER && (!IN_PAGE || g.NBX.world === g.__nbxWorld)) return; // 같은 페이지에 두 번 들어와도 한 번만 정의합니다
   const FEATURES = [
     { id: 'none',         label: '사용 안 함',     desc: '이 단축키를 사용하지 않습니다' },
     { id: 'enterSectionTitle', label: '엔터+소제목', desc: '엔터로 새 줄을 만든 뒤 그 줄을 소제목으로 설정합니다', styleable: true },
@@ -149,5 +206,18 @@
 
   const modelOf = (cmt, p) => (cmt && cmt.models && cmt.models[p]) || (AI_PROVIDERS[p] && AI_PROVIDERS[p].model) || '';
 
-  g.NBX = { AI_PROVIDERS, PROVIDER_IDS, MODEL_RE, modelOf, PARTNER, applyRemote, remoteSelectors, FEATURES, QUOTE_STYLES, FONTS, SIZES, SLOT_COUNT, DEFAULTS, merge, clone, keyLabel, byId, emptyStyle, defaultKey };
+  // 이 확장이 만든 화면 요소가 아닌 토이블록 화면(다른 설치본)이 있는지 — 폴더 설치본과 웹스토어 설치본이 함께 켜진 경우
+  function foreignCopy() {
+    const w = g.__nbxWorld;
+    if (!IN_PAGE || !w) return false;
+    try {
+      return [...document.querySelectorAll('#nbx-bar, #nbx-panel-host, #nbx-cmt-host')].some((el) => {
+        const o = el.getAttribute('data-nbx-owner') || '';
+        return !o.startsWith(w.tag + ':');
+      });
+    } catch (_) { return false; }
+  }
+
+  g.NBX = { AI_PROVIDERS, PROVIDER_IDS, MODEL_RE, modelOf, PARTNER, applyRemote, remoteSelectors, FEATURES, QUOTE_STYLES, FONTS, SIZES, SLOT_COUNT, DEFAULTS, merge, clone, keyLabel, byId, emptyStyle, defaultKey,
+    VERSION: VER, world: IN_PAGE ? g.__nbxWorld : null, foreignCopy };
 })(globalThis);

@@ -1,9 +1,13 @@
 // 네이버 스마트에디터 ONE 서식 단축키 — 콘텐츠 스크립트
 (() => {
-  if (window.__nbxLoaded) return;
-  window.__nbxLoaded = true;
-
   const NBX = globalThis.NBX;
+  if (!NBX) return;
+  const W = NBX.world; // 이 버전의 실행 공간 — 새 버전이 들어오면 W.dead가 되고 모든 동작을 멈춥니다
+  if (window.__nbxLoaded && window.__nbxLoaded === W) return;
+  window.__nbxLoaded = W || true;
+  const own = (el) => (W ? W.own(el) : el);
+  // 이 버전이 만든 화면 요소만 찾습니다(다른 설치본·예전 버전의 같은 이름 요소는 건드리지 않음)
+  const mine = (id) => (W ? document.querySelector('#' + id + '[data-nbx-owner="' + W.token + '"]') : document.getElementById(id));
   let settings = NBX.merge(null);
   let busy = false;
   const IS_MAC = /Mac/i.test(navigator.platform);
@@ -506,6 +510,7 @@
   }
 
   function onKey(e) {
+    if (W && W.dead) return;
     if (!e.ctrlKey && !e.altKey && !e.metaKey) return;
     const here = isEditor();
     if (!here && !parentIsEditor()) return;
@@ -537,8 +542,8 @@
 
   // ───────────────── 화면 UI ─────────────────
   function toast(msg, kind = 'ok') {
-    let t = document.getElementById('nbx-toast');
-    if (!t) { t = document.createElement('div'); t.id = 'nbx-toast'; document.body.appendChild(t); }
+    let t = mine('nbx-toast');
+    if (!t) { t = own(document.createElement('div')); t.id = 'nbx-toast'; document.body.appendChild(t); }
     t.textContent = msg;
     t.className = 'nbx-show nbx-' + kind;
     clearTimeout(t._h);
@@ -562,7 +567,7 @@
   let cmdKeys = {};
   function loadCmdKeys() {
     chrome.runtime.sendMessage({ type: 'nbx-get-commands' }).then((r) => {
-      if (r && r.keys) { cmdKeys = r.keys; const bar = document.getElementById('nbx-bar'); if (bar) renderBar(); }
+      if (r && r.keys) { cmdKeys = r.keys; const bar = mine('nbx-bar'); if (bar) renderBar(); }
     }).catch(() => {});
   }
 
@@ -595,10 +600,11 @@
   }
 
   function renderBar() {
-    let bar = document.getElementById('nbx-bar');
+    let bar = mine('nbx-bar');
     if (!settings.showBar) { if (bar) bar.remove(); return; }
     if (!bar) {
-      bar = document.createElement('div');
+      if (W && W.dead) return;
+      bar = own(document.createElement('div'));
       bar.id = 'nbx-bar';
       // 바 빈 곳을 눌러도 에디터 커서·선택이 사라지지 않게 합니다
       bar.addEventListener('mousedown', (e) => e.preventDefault());
@@ -607,6 +613,8 @@
     bar.innerHTML = '';
     if (settings.barMode === 'float') renderFloatBar(bar);
     else renderTopBar(bar);
+    // 다른(예전) 설치본이 이 바를 다시 그리면 알아챌 수 있게 표시해 둡니다
+    if (W && bar.firstElementChild) bar.firstElementChild.setAttribute('data-nbx-child', W.token);
   }
 
   // ── 상단 고정 버튼 줄: 글쓰기 화면 머리글(로고와 저장·발행 사이)의 빈 곳에 놓습니다
@@ -673,7 +681,7 @@
   }
 
   function placeTopBar() {
-    const bar = document.getElementById('nbx-bar');
+    const bar = mine('nbx-bar');
     if (!bar || !bar.classList.contains('nbx-top')) return;
     bar.style.maxWidth = '';
     bar.classList.remove('nbx-compact');
@@ -770,10 +778,10 @@
       handle.addEventListener('pointercancel', up);
     });
   }
-  window.addEventListener('resize', () => { clampBar(document.getElementById('nbx-bar')); placeTopBar(); });
+  window.addEventListener('resize', () => { clampBar(mine('nbx-bar')); placeTopBar(); });
 
   // 텍스트를 선택하면 뜨는 미니 팝업
-  function hidePop() { const p = document.getElementById('nbx-pop'); if (p) p.style.display = 'none'; }
+  function hidePop() { const p = mine('nbx-pop'); if (p) p.style.display = 'none'; }
   function showPopForSelection() {
     if (!settings.showPopup || !isEditor()) return hidePop();
     const sel = window.getSelection();
@@ -784,8 +792,8 @@
     if (!sel.toString().trim()) return hidePop();
     const rect = sel.getRangeAt(0).getBoundingClientRect();
     if (!rect.width && !rect.height) return hidePop();
-    let pop = document.getElementById('nbx-pop');
-    if (!pop) { pop = document.createElement('div'); pop.id = 'nbx-pop'; document.body.appendChild(pop); }
+    let pop = mine('nbx-pop');
+    if (!pop) { pop = own(document.createElement('div')); pop.id = 'nbx-pop'; document.body.appendChild(pop); }
     pop.innerHTML = '';
     uiFeatures().filter((f) => !['image', 'hr', 'quote2'].includes(f.id))
       .map((f) => (f.id === 'enterSectionTitle' ? { ...f, id: 'sectionTitle', title: NBX.byId.sectionTitle.desc } : f)) // 선택한 문단을 바꾸는 팝업이므로 엔터 없이
@@ -818,7 +826,7 @@
 
   function renderUI() {
     if (!isEditor()) {
-      const bar = document.getElementById('nbx-bar');
+      const bar = mine('nbx-bar');
       if (bar) bar.remove();
       return hidePop();
     }
@@ -861,6 +869,17 @@
     return false;
   });
 
+  // 폴더 설치본과 웹스토어 설치본이 함께 켜져 있으면 단축키가 두 번 실행될 수 있어 알려 줍니다(페이지마다 한 번)
+  let dupWarned = false;
+  function warnDuplicate() {
+    if (dupWarned || !W || W.dead) return;
+    const bar = mine('nbx-bar');
+    const hijacked = bar && bar.firstElementChild && bar.firstElementChild.getAttribute('data-nbx-child') !== W.token;
+    if (!hijacked && !(NBX.foreignCopy && NBX.foreignCopy())) return;
+    dupWarned = true;
+    toast('토이블록이 두 개 켜져 있어요. chrome://extensions에서 예전(폴더) 설치본을 삭제해 주세요. 단축키가 두 번 실행될 수 있어요.', 'err');
+  }
+
   // ───────────────── 시작 ─────────────────
   chrome.storage.sync.get('nbx').then((r) => {
     settings = NBX.merge(r.nbx);
@@ -874,7 +893,7 @@
         hookChildFrames();
         misses = 0;
         if (last !== true) { last = true; renderUI(); loadCmdKeys(); }
-        else placeTopBar(); // 머리글이 늦게 그려지거나 바뀌어도 자리를 다시 잡습니다
+        else { placeTopBar(); warnDuplicate(); } // 머리글이 늦게 그려지거나 바뀌어도 자리를 다시 잡습니다
       } else if (last !== false && (last === null || ++misses >= 3)) {
         last = false;
         renderUI();
