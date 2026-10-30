@@ -672,7 +672,7 @@
   }
 
   function partnerBanner() {
-    return `<a class="partner" href="${esc(NBX.PARTNER.url)}" target="_blank" rel="noopener sponsored"><b>🛒 쿠팡에서 오늘의 추천 상품 보기 →</b><span>블로그 작업 장비·생활용품 둘러보기</span></a>
+    return `<a class="partner" href="${esc(NBX.PARTNER.url)}" target="_blank" rel="noopener sponsored"><b>${esc(NBX.PARTNER.title)}</b><span>${esc(NBX.PARTNER.sub)}</span></a>
       <p class="disc">${esc(NBX.PARTNER.disclosure)}</p>`;
   }
 

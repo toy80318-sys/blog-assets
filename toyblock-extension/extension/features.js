@@ -211,7 +211,12 @@
     return parts.join('+');
   }
 
-  const PARTNER = { url: 'https://link.coupang.com/a/iciJJKMF2a', disclosure: '이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.' };
+  // 하단 추천 배너(쿠팡 파트너스). 이동할 곳은 온라인 설정(remote-config.json의 partner)으로 바꿀 수 있습니다:
+  // 쿠팡 파트너스 링크(link.coupang.com) 또는 쿠팡 파트너스 상품을 모아 둔 인포크링크 페이지(link.inpock.co.kr)
+  const PARTNER = { url: 'https://link.coupang.com/a/iciJJKMF2a', title: '🛒 쿠팡에서 오늘의 추천 상품 보기 →', sub: '블로그 작업 장비·생활용품 둘러보기',
+    disclosure: '이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.' };
+  const PARTNER_URL_RE = /^https:\/\/(link\.coupang\.com\/[A-Za-z0-9\/_\-]+|link\.inpock\.co\.kr\/[A-Za-z0-9._\-]+(\/[A-Za-z0-9._\-]+)*\/?)$/;
+  const PARTNER_TEXT_RE = /^[^<>{}\\]{1,60}$/;
 
   // 원격 설정(데이터) 적용: 형식이 맞는 값만 받아들입니다
   const SAFE_TOKEN = /^[A-Za-z0-9_\-가-힣 .·]{1,80}$/;
@@ -229,7 +234,11 @@
   }
   function applyRemote(remote) {
     if (!remote || typeof remote !== 'object') return;
-    if (remote.partner && typeof remote.partner.url === 'string' && /^https:\/\/link\.coupang\.com\/[A-Za-z0-9/_\-]+$/.test(remote.partner.url)) PARTNER.url = remote.partner.url;
+    const p = remote.partner;
+    if (!p || typeof p !== 'object') return;
+    if (typeof p.url === 'string' && PARTNER_URL_RE.test(p.url)) PARTNER.url = p.url;
+    if (typeof p.title === 'string' && PARTNER_TEXT_RE.test(p.title.trim())) PARTNER.title = p.title.trim();
+    if (typeof p.sub === 'string' && PARTNER_TEXT_RE.test(p.sub.trim())) PARTNER.sub = p.sub.trim();
   }
 
   const modelOf = (cmt, p) => (cmt && cmt.models && cmt.models[p]) || (AI_PROVIDERS[p] && AI_PROVIDERS[p].model) || '';

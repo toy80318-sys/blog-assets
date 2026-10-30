@@ -131,14 +131,19 @@ function renderUpdate(u, just) {
 }
 chrome.storage.local.get(['nbxUpdate', 'nbxRemote', 'nbxJustUpdated']).then(async (r) => {
   NBX.applyRemote(r.nbxRemote);
-  $('#partner').href = NBX.PARTNER.url;
+  showPartner();
   let u = r.nbxUpdate;
   renderUpdate(u, r.nbxJustUpdated);
   // 30분 넘게 확인하지 않았으면 지금 확인합니다(웹스토어 설치본은 새 버전이 보이면 바로 받아 적용)
   if (!u || Date.now() - (u.checkedAt || 0) > 30 * 60e3) { u = await chrome.runtime.sendMessage({ type: 'nbx-check-update' }).catch(() => u); renderUpdate(u, r.nbxJustUpdated); }
 });
 
-$('#partner').href = NBX.PARTNER.url;
+function showPartner() {
+  $('#partner').href = NBX.PARTNER.url;
+  $('#partnerTitle').textContent = NBX.PARTNER.title;
+  $('#partnerSub').textContent = NBX.PARTNER.sub;
+}
+showPartner();
 $('#disc').textContent = NBX.PARTNER.disclosure;
 
 $('#opt').addEventListener('click', () => chrome.runtime.openOptionsPage());

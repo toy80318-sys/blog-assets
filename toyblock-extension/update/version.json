@@ -1,12 +1,12 @@
 {
   "name": "토이블록 네이버 블로그 도우미",
-  "version": "1.9.0",
-  "released_at": "2026-10-28T07:50:07Z",
-  "notes": "· 이웃 새 글에서 댓글을 받지 않는 네이버 공식 블로그(네이버 검색·지식iN 등) 글을 뺐어요. 사람 블로그 글만 보여요\n· 블로거 이름을 누르면 그 블로그로 바로 가요. 원하지 않는 블로그는 '숨기기'로 뺄 수 있어요(뺀 글은 '보기'로 다시 확인)\n· 설치 방법 안내서를 실제 크롬 화면 캡처로 새로 만들었어요",
+  "version": "1.9.1",
+  "released_at": "2026-10-30T04:07:56Z",
+  "notes": "· 하단 추천 배너를 온라인 설정으로 바꿀 수 있게 했어요(쿠팡 파트너스 링크나 인포크링크 페이지, 배너 문구)",
   "download_url": "https://github.com/toy80318-sys/blog-assets/raw/main/toyblock-extension/dist/toyblock-naver-blog-helper.zip",
   "guide_url": "https://github.com/toy80318-sys/blog-assets/blob/main/toyblock-extension/README.md#업데이트-방법",
   "store_url": "",
   "files_url": "https://raw.githubusercontent.com/toy80318-sys/blog-assets/main/toyblock-extension/dist/toyblock-extension-files.zip",
-  "files_sha256": "965f45d7e52fb47a0ad2a2fec716cfe22655cad0b0e9530c8f98116f7b98953d",
-  "files_size": 142740
+  "files_sha256": "d3dbbd36f8fbbd7bce43bebb82d1cefaca6f7355ded0cbfb115f80c25acacf71",
+  "files_size": 144917
 }

@@ -395,7 +395,13 @@ $('#restoreBtn').addEventListener('click', async () => {
 });
 if (location.hash === '#move') setTimeout(() => document.getElementById('move').scrollIntoView(), 50);
 
-$('#partner').href = NBX.PARTNER.url;
+function showPartner() {
+  $('#partner').href = NBX.PARTNER.url;
+  $('#partnerTitle').textContent = NBX.PARTNER.title;
+  $('#partnerSub').textContent = NBX.PARTNER.sub;
+}
+showPartner();
+chrome.storage.local.get('nbxRemote').then((r) => { NBX.applyRemote(r.nbxRemote); showPartner(); }).catch(() => {});
 $('#disc').textContent = NBX.PARTNER.disclosure;
 
 load();
