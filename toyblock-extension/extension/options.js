@@ -203,6 +203,7 @@ function renderCmt() {
   $('#cmtPrefetch').checked = c.prefetch;
   $('#cmtLinkButtons').checked = c.linkButtons;
   $('#buddyAuto').checked = c.buddyAuto;
+  $('#buddyOneClick').checked = c.buddyOneClick;
   document.querySelectorAll('input[name="buddyType"]').forEach((r) => (r.checked = r.value === c.buddyType));
   if (document.activeElement !== $('#buddyMsg')) { $('#buddyMsg').value = c.buddyMsg || ''; $('#buddyMsg').placeholder = NBX.BUDDY_MSG; }
   $('#buddyPreview').textContent = '예) ' + NBX.buddyMessage(c.buddyMsg, '하루기록');
@@ -258,7 +259,7 @@ $('#aiTest').addEventListener('click', async () => {
 $('#cmtStyle').addEventListener('input', (e) => { S.cmt.style = e.target.value.slice(0, 300); save(); });
 $('#buddyMsg').addEventListener('input', (e) => { S.cmt.buddyMsg = e.target.value.replace(/[<>]/g, '').slice(0, 200); $('#buddyPreview').textContent = '예) ' + NBX.buddyMessage(S.cmt.buddyMsg, '하루기록'); save(); });
 document.querySelectorAll('input[name="buddyType"]').forEach((r) => r.addEventListener('change', () => { if (r.checked) { S.cmt.buddyType = r.value; save(); } }));
-[['#cmtCallName', 'callName'], ['#cmtPrefill', 'prefill'], ['#cmtPrefetch', 'prefetch'], ['#cmtLinkButtons', 'linkButtons'], ['#buddyAuto', 'buddyAuto']].forEach(([id, k]) =>
+[['#cmtCallName', 'callName'], ['#cmtPrefill', 'prefill'], ['#cmtPrefetch', 'prefetch'], ['#cmtLinkButtons', 'linkButtons'], ['#buddyAuto', 'buddyAuto'], ['#buddyOneClick', 'buddyOneClick']].forEach(([id, k]) =>
   $(id).addEventListener('change', (e) => { S.cmt[k] = e.target.checked; save(); }));
 
 async function renderCmds() {

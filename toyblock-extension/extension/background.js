@@ -752,7 +752,7 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
     case 'nbx-cmt-copy': return run(copyText(msg.text).then((ok) => ({ ok })));
     case 'nbx-cmt-posted': {
       const key = postKeyOf(msg.blogId, msg.logNo);
-      if (sender.tab) queueOnPosted(sender.tab.id, key);
+      if (sender.tab && !msg.hold) queueOnPosted(sender.tab.id, key); // hold: 서로이웃 신청 결과를 기다렸다가 넘어감
       return run(withLog((log) => {
         const now = Date.now();
         const e = log.posts[key] || {};
@@ -780,9 +780,16 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
     case 'nbx-cmt-queue-resume': return run(queueResume());
     case 'nbx-cmt-queue-stop': return run(queueStop('사용자가 멈춤'));
     case 'nbx-cmt-queue-state': return run(getQueue().then(viewOf));
-    case 'nbx-cmt-nb-open': return run(openBuddy({ blogId: msg.blogId, nick: msg.nick }, true));
-    case 'nbx-cmt-nb-hello': return run(buddyHello(sender));
+    case 'nbx-cmt-nb-open': return run(openBuddy({ blogId: msg.blogId, nick: msg.nick }, { origin: sender.tab ? sender.tab.id : null, hold: !!msg.hold }));
+    case 'nbx-cmt-nb-hello': return run(buddyHello(sender, msg));
     case 'nbx-cmt-nb-filled': return run(buddyFilled(sender, msg));
+    case 'nbx-cmt-nb-step': return run(buddyStep(sender, msg));
+    case 'nbx-cmt-nb-stop': return run(buddyStop(sender));
+    case 'nbx-cmt-nb-done': {
+      const ok = ['mutual', 'follow', 'already', 'fail'].includes(msg.result);
+      return ok && sender.tab ? run(buddyResult(sender.tab.id, msg.result, sender.tab.windowId)) : false;
+    }
+    case 'nbx-cmt-queue-posted': return sender.tab ? run(queueOnPosted(sender.tab.id, postKeyOf(msg.blogId, msg.logNo), 900)) : false;
     default: return false;
   }
 });
@@ -887,9 +894,9 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
 });
 
 // ───────────── 연속 소통(반자동) ─────────────
-// 목록의 글을 한 탭에서 차례로 엽니다. 글마다 댓글을 입력칸에 채워 두고, 사용자가 직접 [등록]을 누르면 다음 글로 넘어갑니다.
-// 이웃이 아닌 블로그는 네이버 이웃 추가 창을 열어 신청 메시지만 채워 둡니다([확인]은 사용자가 직접).
-// 확장은 댓글 등록 버튼도, 이웃 신청 확인 버튼도 누르지 않습니다.
+// 목록의 글을 한 탭에서 차례로 엽니다. 글마다 댓글을 입력칸에 채워 두고, 사용자가 등록하면(네이버 [등록] 또는 카드의
+// [등록 + 서로이웃 신청]) 다음 글로 넘어갑니다. 이웃 추가 창은 사용자가 버튼을 누른 블로그에만 열고, 그 창에서만
+// 서로이웃 신청을 끝까지 진행합니다. 사용자가 누르지 않은 글·블로그에는 아무것도 보내지 않습니다.
 const QUEUE_MAX = 50;          // 한 번에 차례로 열 글 수
 const QUEUE_NEXT_MS = 2500;    // 등록 뒤 다음 글로 넘어가기까지
 const HOUR_PAUSE = 20;         // 최근 1시간 댓글이 이만큼이면 잠시 멈춤
@@ -934,7 +941,6 @@ function queueStart(msg, sender) {
     q.tabId = tab.id;
     await queueJob(tab.id, q);
     await setQueue(q);
-    if (q.buddy) maybeBuddy(items[0]);
     if (items[1]) prefetch(items[1]);
     return { ok: true, total: items.length };
   });
@@ -960,11 +966,10 @@ function queueAdvance(reason, fromTab) {
 }
 async function openCurrent(q) {
   try { await chrome.tabs.get(q.tabId); }
-  catch (_) { const t = await chrome.tabs.create({ url: postUrl(q.items[q.i]), active: true }); q.tabId = t.id; await queueJob(t.id, q); await setQueue(q); if (q.buddy) maybeBuddy(q.items[q.i]); return; }
+  catch (_) { const t = await chrome.tabs.create({ url: postUrl(q.items[q.i]), active: true }); q.tabId = t.id; await queueJob(t.id, q); await setQueue(q); return; }
   await queueJob(q.tabId, q);
   await setQueue(q);
   await chrome.tabs.update(q.tabId, { url: postUrl(q.items[q.i]), active: true });
-  if (q.buddy) maybeBuddy(q.items[q.i]);
   if (q.items[q.i + 1]) prefetch(q.items[q.i + 1]);
 }
 function queueResume() {
@@ -986,13 +991,15 @@ function queueStop(why) {
     return { ok: true, view: v };
   });
 }
-// 연속 소통 탭에서 사용자가 등록을 누르면(댓글 도우미가 실제로 올라간 것을 확인한 뒤 알림) 잠시 뒤 다음 글로
-async function queueOnPosted(tabId, key) {
+// 연속 소통 탭에서 사용자가 등록하면(댓글 도우미가 실제로 올라간 것을 확인한 뒤 알림) 잠시 뒤 다음 글로.
+// 서로이웃 신청도 함께 눌렀으면 카드가 신청 결과를 받은 뒤 'nbx-cmt-queue-posted'로 다시 알려 줍니다.
+async function queueOnPosted(tabId, key, ms = QUEUE_NEXT_MS) {
   const q = await getQueue();
-  if (!q || q.state !== 'run' || q.tabId !== tabId) return;
+  if (!q || q.state !== 'run' || q.tabId !== tabId) return { ok: false };
   const it = q.items[q.i];
-  if (!it || postKeyOf(it.blogId, it.logNo) !== key) return;
-  setTimeout(() => { queueAdvance('posted', tabId); }, QUEUE_NEXT_MS);
+  if (!it || postKeyOf(it.blogId, it.logNo) !== key) return { ok: false };
+  setTimeout(() => { queueAdvance('posted', tabId); }, ms);
+  return { ok: true };
 }
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   const q = await getQueue();
@@ -1000,22 +1007,36 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
 });
 
 // ── 이웃 추가 창(네이버 BuddyAdd) ──
+// 사용자가 버튼(카드의 [등록 + 서로이웃 신청]·[＋ 서로이웃 신청], 목록의 ＋이웃, 블로그의 이웃추가)을 누른 블로그에만 엽니다.
+// 그렇게 연 창은 서로이웃을 고르고 신청 메시지를 채운 뒤 [다음]·[확인]까지 진행합니다(설정에서 끄면 채워 두기만).
+const BUDDY_STEP_MAX = 5;      // 한 창에서 확장이 누르는 버튼 수(다음·확인 등) — 화면이 예상과 달라도 계속 누르지 않게
 async function buddyLog() {
   const r = await chrome.storage.local.get('nbxBuddyLog').catch(() => ({}));
   const L = (r && r.nbxBuddyLog) || {};
   L.asked = L.asked || {};
+  L.sent = L.sent || {};
   if (L.day !== dayKey()) { L.day = dayKey(); L.n = 0; }
   const cut = Date.now() - BUDDY_AGAIN_DAYS * 864e5;
   Object.keys(L.asked).forEach((k) => { if (L.asked[k] < cut) delete L.asked[k]; });
+  Object.keys(L.sent).forEach((k) => { if (!L.sent[k] || L.sent[k].at < cut) delete L.sent[k]; });
   return L;
 }
-async function buddyJobs() { const r = await chrome.storage.session.get('nbxBuddyJobs').catch(() => ({})); return (r && r.nbxBuddyJobs) || {}; }
-async function maybeBuddy(it) {
-  const L = await buddyLog();
-  if (L.asked[String(it.blogId).toLowerCase()]) return { ok: false, error: 'asked' };
-  return openBuddy(it, false);
+async function buddyJobs() {
+  const r = await chrome.storage.session.get('nbxBuddyJobs').catch(() => ({}));
+  const jobs = (r && r.nbxBuddyJobs) || {};
+  Object.keys(jobs).forEach((k) => { if (Date.now() - jobs[k].at > 30 * 60e3) delete jobs[k]; });
+  return jobs;
 }
-async function openBuddy(it, manual) {
+const saveBuddyJobs = (jobs) => chrome.storage.session.set({ nbxBuddyJobs: jobs }).catch(() => {});
+// 오늘 몇 개 열었는지 세고, 서로이웃 신청을 자동으로 마칠지 정합니다
+async function buddyCount(blogId) {
+  const L = await buddyLog();
+  const over = L.n >= BUDDY_DAY_MAX;
+  if (!over) { L.n++; L.asked[String(blogId).toLowerCase()] = Date.now(); }
+  await chrome.storage.local.set({ nbxBuddyLog: L }).catch(() => {});
+  return { over, n: L.n };
+}
+async function openBuddy(it, opts = {}) {
   if (!ID_RE.test(it.blogId || '')) return { ok: false, error: 'bad-id' };
   const L = await buddyLog();
   if (L.n >= BUDDY_DAY_MAX) return { ok: false, error: 'day-limit', n: L.n };
@@ -1025,25 +1046,88 @@ async function openBuddy(it, manual) {
   const win = await chrome.windows.create({ url: `https://blog.naver.com/BuddyAdd.naver?blogId=${encodeURIComponent(it.blogId)}`, type: 'popup', width: 520, height: 680, focused: true });
   const tabId = win && win.tabs && win.tabs[0] && win.tabs[0].id;
   const jobs = await buddyJobs();
-  Object.keys(jobs).forEach((k) => { if (Date.now() - jobs[k].at > 30 * 60e3) delete jobs[k]; });
-  if (tabId != null) jobs[tabId] = { blogId: it.blogId, nick, msg, type: s.cmt.buddyType, at: Date.now(), manual: !!manual };
-  await chrome.storage.session.set({ nbxBuddyJobs: jobs }).catch(() => {});
-  L.n++; L.asked[String(it.blogId).toLowerCase()] = Date.now();
-  await chrome.storage.local.set({ nbxBuddyLog: L }).catch(() => {});
-  return { ok: true, windowId: win.id, tabId, today: L.n };
+  if (tabId != null) jobs[tabId] = { blogId: it.blogId, nick, msg, type: s.cmt.buddyType, at: Date.now(), auto: s.cmt.buddyOneClick !== false, steps: 0, origin: opts.origin == null ? null : opts.origin, hold: !!opts.hold };
+  await saveBuddyJobs(jobs);
+  const c = await buddyCount(it.blogId);
+  return { ok: true, windowId: win.id, tabId, today: c.n, auto: s.cmt.buddyOneClick !== false };
 }
-async function buddyHello(sender) {
-  const tabId = sender.tab && sender.tab.id;
+// 이웃 추가 창의 도우미가 처음 묻는 것: 이 창에서 무엇을 할지.
+// 토이블록이 연 창이 아니면(블로그 화면의 이웃추가 버튼을 사용자가 누른 창) 설정이 켜져 있을 때만 같은 방식으로 돕습니다.
+async function buddyHello(sender, msg) {
+  const tab = sender.tab;
+  const tabId = tab && tab.id;
   if (tabId == null || !/^https:\/\/(m\.)?blog\.naver\.com\//.test(sender.url || '')) return { ok: false };
-  const j = (await buddyJobs())[tabId];
-  if (!j || Date.now() - j.at > 30 * 60e3) return { ok: false };
-  return { ok: true, blogId: j.blogId, nick: j.nick, msg: j.msg, type: j.type };
+  const jobs = await buddyJobs();
+  let j = jobs[tabId];
+  if (!j) {
+    const s = await getSettings();
+    const blogId = String((msg && msg.blogId) || '');
+    if (!s.cmt.buddyOneClick || !ID_RE.test(blogId)) return { ok: false };
+    let nick = '';
+    if (tab.openerTabId != null) {
+      const who = await chrome.tabs.sendMessage(tab.openerTabId, { type: 'nbx-cmt-whois' }).catch(() => null);
+      if (who && who.blogId && String(who.blogId).toLowerCase() === blogId.toLowerCase()) nick = cleanStr(who.nick, 30);
+    }
+    const c = await buddyCount(blogId);
+    j = { blogId, nick, msg: NBX.buddyMessage(s.cmt.buddyMsg, nick, (n) => NBXC.callable(n)), type: s.cmt.buddyType, at: Date.now(), auto: !c.over, steps: 0, origin: tab.openerTabId == null ? null : tab.openerTabId, native: true, over: c.over };
+    jobs[tabId] = j;
+    await saveBuddyJobs(jobs);
+  }
+  return { ok: true, blogId: j.blogId, nick: j.nick, msg: j.msg, type: j.type, auto: !!j.auto && !j.result && !j.stopped, over: !!j.over, result: j.result || '', done: j.picked || '' };
 }
 async function buddyFilled(sender, msg) {
   const tabId = sender.tab && sender.tab.id;
   const jobs = await buddyJobs();
   if (tabId == null || !jobs[tabId]) return { ok: false };
   jobs[tabId].filled = !!msg.filled; jobs[tabId].picked = !!msg.picked;
-  await chrome.storage.session.set({ nbxBuddyJobs: jobs }).catch(() => {});
+  await saveBuddyJobs(jobs);
   return { ok: true };
 }
+// 확장이 창 안의 버튼(다음·확인 등)을 누르기 전에 묻습니다: 사용자가 누른 창이고, 아직 몇 번 안 눌렀을 때만
+async function buddyStep(sender, msg) {
+  const tabId = sender.tab && sender.tab.id;
+  const jobs = await buddyJobs();
+  const j = tabId == null ? null : jobs[tabId];
+  if (!j || !j.auto || j.result || j.stopped) return { ok: false };
+  if (j.steps >= BUDDY_STEP_MAX) return { ok: false, error: 'too-many' };
+  j.steps++; j.lastStep = cleanStr(msg && msg.label, 20);
+  if (msg && (msg.picked === 'mutual' || msg.picked === 'follow')) j.picked = msg.picked; // 다음 화면에서 결과(서로이웃/이웃)를 알 수 있게
+  await saveBuddyJobs(jobs);
+  return { ok: true, step: j.steps };
+}
+async function buddyStop(sender) {
+  const tabId = sender.tab && sender.tab.id;
+  const jobs = await buddyJobs();
+  if (tabId == null || !jobs[tabId]) return { ok: false };
+  jobs[tabId].stopped = true;
+  await saveBuddyJobs(jobs);
+  return { ok: true };
+}
+// 결과: mutual(서로이웃 신청 보냄) · follow(이웃으로 추가) · already(이미 이웃·신청 중) · closed(완료 화면 전에 창이 닫힘) · fail
+async function buddyResult(tabId, result, windowId) {
+  const jobs = await buddyJobs();
+  const j = jobs[tabId];
+  if (!j || j.result) return { ok: false };
+  j.result = result;
+  await saveBuddyJobs(jobs);
+  if (result === 'mutual' || result === 'follow' || result === 'already') {
+    const L = await buddyLog();
+    L.sent[String(j.blogId).toLowerCase()] = { r: result, at: Date.now() };
+    await chrome.storage.local.set({ nbxBuddyLog: L }).catch(() => {});
+  }
+  const note = { type: 'nbx-nb-result', blogId: j.blogId, result, hold: !!j.hold };
+  if (j.origin != null) chrome.tabs.sendMessage(j.origin, note).catch(() => {});
+  chrome.storage.local.set({ nbxBuddyLast: { blogId: j.blogId, result, at: Date.now() } }).catch(() => {});
+  // 신청을 마친 창은 잠시 결과를 보여 준 뒤 닫습니다(팝업 창 하나짜리일 때만)
+  if (windowId != null && result !== 'fail' && result !== 'closed') {
+    setTimeout(async () => {
+      try { const w = await chrome.windows.get(windowId, { populate: true }); if (w.type === 'popup' && w.tabs.length === 1) await chrome.windows.remove(windowId); } catch (_) {}
+    }, 1600);
+  }
+  return { ok: true };
+}
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  const jobs = await buddyJobs();
+  const j = jobs[tabId];
+  if (j && !j.result) await buddyResult(tabId, j.steps ? 'closed' : 'cancel', null);
+});

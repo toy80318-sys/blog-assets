@@ -102,8 +102,9 @@
   <label class="opt"><input type="checkbox" id="cmtLinkButtons"> 네이버 검색·이웃새글 화면의 글 옆에 💬 댓글 버튼 표시</label>
 
   <h2 id="queue">연속 소통 · 이웃 추가</h2>
-  <p class="desc">이웃 소통 탭의 <b>▶ 연속 소통 시작</b>을 누르면 목록의 글이 한 탭에서 차례로 열리고, 댓글이 입력칸에 채워진 채 기다립니다. 읽고 고친 뒤 <b>등록</b>을 누르면 잠시 뒤 다음 글로 넘어갑니다. 최근 1시간 댓글이 20개가 되면 잠시 멈춥니다. 키워드 노출 글처럼 이웃이 아닌 블로그는 네이버 <b>이웃 추가 창</b>을 열고 신청 메시지를 채워 둡니다. 신청 버튼은 직접 눌러 마쳐 주세요.</p>
-  <label class="opt"><input type="checkbox" id="buddyAuto"> 연속 소통에서 이웃이 아닌 블로그는 이웃 추가 창도 열기 (하루 50개까지, 같은 블로그는 30일 동안 다시 열지 않음)</label>
+  <p class="desc">이웃 소통 탭의 <b>▶ 연속 소통 시작</b>을 누르면 목록의 글이 한 탭에서 차례로 열리고, 댓글이 입력칸에 채워진 채 기다립니다. 읽고 고친 뒤 댓글 카드의 <b>✓ 등록 + 서로이웃 신청</b>을 누르면 댓글이 올라가고 그 블로그에 서로이웃 신청까지 마친 뒤 다음 글로 넘어갑니다(이웃 글은 <b>✓ 댓글 등록</b>). 최근 1시간 댓글이 20개가 되면 잠시 멈춥니다. 블로그 화면의 <b>이웃추가</b> 버튼을 눌러도 서로이웃과 신청 메시지를 골라 바로 신청합니다.</p>
+  <label class="opt"><input type="checkbox" id="buddyAuto"> 이웃이 아닌 블로그 글은 댓글 카드에 [✓ 등록 + 서로이웃 신청] 버튼으로 한 번에 (하루 50개까지)</label>
+  <label class="opt"><input type="checkbox" id="buddyOneClick"> 이웃 추가 창이 열리면 서로이웃 신청까지 바로 마치기 (토이블록 버튼이나 블로그의 이웃추가 버튼을 눌렀을 때만 · 끄면 메시지만 채워 두기)</label>
   <div class="opt" style="flex-wrap:wrap"><b style="font-size:13px">신청 방식</b>
     <label><input type="radio" name="buddyType" value="mutual"> 서로이웃 신청</label>
     <label><input type="radio" name="buddyType" value="follow"> 이웃으로만 추가</label></div>

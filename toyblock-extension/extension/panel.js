@@ -17,7 +17,7 @@
 
   let settings = NBX.merge(null);
   const S = { open: false, tab: 'channel', blogId: null, channel: null, chLoading: false, chError: '', post: null, expo: null, expoRun: null, postExpo: null,
-    cmt: { mode: 'buddy', buddy: { items: [], page: 0, loading: false, error: '', more: true }, search: { q: '', items: [], loading: false, error: '', done: false }, marks: {}, stats: null, started: false, hidden: {}, showHidden: false, qv: null } };
+    cmt: { mode: 'buddy', buddy: { items: [], page: 0, loading: false, error: '', more: true }, search: { q: '', items: [], loading: false, error: '', done: false, recOnly: true, scores: {}, scoring: null }, nbRes: {}, marks: {}, stats: null, started: false, hidden: {}, showHidden: false, qv: null } };
 
   // ───────────── 유틸 ─────────────
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -590,9 +590,56 @@
     Q.loading = true; Q.error = ''; render();
     const r = await chrome.runtime.sendMessage({ type: 'nbx-cmt-search', q }).catch(() => null);
     Q.loading = false; Q.done = true;
-    if (r && r.ok) Q.items = r.items; else { Q.items = []; Q.error = 'fail'; }
+    if (r && r.ok) Q.items = r.items.map((it, i) => ({ ...it, rank: i + 1 })); else { Q.items = []; Q.error = 'fail'; }
+    Q.scores = {};
     render();
     refreshMarks();
+    if (Q.items.length) scoreSearch();
+  }
+
+  // ───────────── 추천 검색: 블로그 점수 60점 이상이거나 검색 상위 10위 안의 글 ─────────────
+  // 블로그 점수는 채널 분석과 같은 기준(검색 노출을 뺀 발행 꾸준함·최근 발행·독자 반응·방문자)으로, 공개 정보만 읽어 계산합니다.
+  const REC_MIN = 60, REC_TOP = 10, BS_TTL = 12 * 3600e3, BS_KEY = 'nbxBlogScores';
+  const scoreOf = (it) => S.cmt.search.scores[String(it.blogId).toLowerCase()];
+  const isTop = (it) => it.rank > 0 && it.rank <= REC_TOP;
+  const isRec = (it) => isTop(it) || scoreOf(it) >= REC_MIN;
+  async function quickScore(id) {
+    const [info, list] = await Promise.allSettled([api(id), api(`${id}/post-list?categoryNo=0&itemCount=30&page=1`)]);
+    const inf = info.status === 'fulfilled' ? info.value : null;
+    const posts = list.status === 'fulfilled' ? ((list.value && list.value.items) || []).map(normPost) : [];
+    if (!inf && !posts.length) throw new Error('no-data');
+    return blogScore({ info: inf, posts, visits: {} }, postingStats(posts), null).score;
+  }
+  let scoreRun = 0, renderT = 0;
+  const renderSoon = () => { if (!renderT) renderT = setTimeout(() => { renderT = 0; if (S.tab === 'cmt') render(); }, 250); };
+  async function scoreSearch() {
+    const Q = S.cmt.search;
+    const my = ++scoreRun;
+    const cache = (await store.get(BS_KEY)) || {};
+    const idOf = {};
+    Q.items.filter((it) => !skipWhy(it)).forEach((it) => { idOf[String(it.blogId).toLowerCase()] = it.blogId; });
+    const ids = Object.keys(idOf);
+    ids.forEach((k) => { const c = cache[k]; if (c && Date.now() - c.at < BS_TTL) Q.scores[k] = c.s; });
+    const todo = ids.filter((k) => Q.scores[k] == null);
+    Q.scoring = todo.length ? { done: ids.length - todo.length, total: ids.length } : null;
+    render();
+    let next = 0;
+    const worker = async () => {
+      while (next < todo.length && my === scoreRun) {
+        const k = todo[next++];
+        try { const sc = await quickScore(idOf[k]); Q.scores[k] = sc; cache[k] = { s: sc, at: Date.now() }; } catch (_) { Q.scores[k] = -1; }
+        if (my !== scoreRun) return;
+        Q.scoring.done++;
+        renderSoon();
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    if (my !== scoreRun) return;
+    const keys = Object.keys(cache);
+    if (keys.length > 500) keys.sort((a, b) => cache[a].at - cache[b].at).slice(0, keys.length - 500).forEach((k) => delete cache[k]);
+    await store.set(BS_KEY, cache);
+    Q.scoring = null;
+    if (S.tab === 'cmt') render();
   }
   function openItem(list, i, relation) {
     const it = list[i];
@@ -620,7 +667,8 @@
   function itemList(list, src) {
     if (!list.length) return '';
     const rows = list.map((it, i) => ({ it, i, why: skipWhy(it) }));
-    const shown = S.cmt.showHidden ? rows : rows.filter((r) => !r.why);
+    const recOnly = src === 'search' && S.cmt.search.recOnly;
+    const shown = rows.filter((r) => (S.cmt.showHidden || !r.why) && (!recOnly || r.why || isRec(r.it)));
     const skipped = rows.length - rows.filter((r) => !r.why).length;
     const WHY = { hidden: '숨긴 블로그', official: '네이버 공식 블로그', closed: '댓글 닫힘' };
     let h = shown.length ? `<ol class="clist">${shown.map(({ it, i, why }) => {
@@ -629,9 +677,13 @@
       const who = it.nick || it.blogName || it.blogId;
       const tool = (why === 'hidden' ? `<button class="hb" data-act="cmtUnhide" data-b="${esc(it.blogId)}" title="이 블로그를 다시 목록에 보이기">다시 보이기</button>`
         : `<button class="hb" data-act="cmtHide" data-b="${esc(it.blogId)}" title="이 블로그 글은 앞으로 목록에서 빼기">숨기기</button>`)
-        + (src === 'search' && !why ? `<button class="hb nb" data-act="nbOpen" data-src="${src}" data-i="${i}" title="이웃 추가 창을 열고 신청 메시지를 채워 둡니다(신청은 직접)">＋이웃</button>` : '');
+        + (src === 'search' && !why ? (S.cmt.nbRes[String(it.blogId).toLowerCase()] ? `<span class="cs done">${NBRES[S.cmt.nbRes[String(it.blogId).toLowerCase()]] || '신청함'}</span>`
+          : `<button class="hb nb" data-act="nbOpen" data-src="${src}" data-i="${i}" title="이 블로그에 서로이웃 신청(창에서 메시지를 채워 신청까지 진행)">＋서로이웃</button>`) : '');
+      const sc = src === 'search' ? scoreOf(it) : null;
+      const badge = src === 'search' ? (isTop(it) ? `<span class="rk" title="이 키워드 검색 ${it.rank}번째 글">상위 ${it.rank}위</span>` : '')
+        + (sc >= 0 ? `<span class="bsc ${sc >= REC_MIN ? 'hi' : ''}" title="공개 정보로 계산한 블로그 점수(검색 노출 제외)">${sc}점</span>` : '') : '';
       return `<li class="ci ${mk.p || why ? 'dim' : ''}" data-act="cmtOpen" data-src="${src}" data-i="${i}" title="새 탭에서 글을 열고 댓글창으로 이동해 댓글을 복사합니다">
-        <div class="ct">${esc(it.title || '(제목 없음)')}</div><div class="cm"><a class="home" href="https://blog.naver.com/${esc(it.blogId)}" target="_blank" rel="noopener" title="${esc(who)} 블로그로 가기">${esc(who)} ↗</a>${it.at ? `<span>· ${esc(ago(it.at))}</span>` : ''}${st}${tool}<b class="go">💬</b></div></li>`;
+        <div class="ct">${esc(it.title || '(제목 없음)')}</div>${badge ? `<div class="cb">${badge}</div>` : ''}<div class="cm"><a class="home" href="https://blog.naver.com/${esc(it.blogId)}" target="_blank" rel="noopener" title="${esc(who)} 블로그로 가기">${esc(who)} ↗</a>${it.at ? `<span>· ${esc(ago(it.at))}</span>` : ''}${st}${tool}<b class="go">💬</b></div></li>`;
     }).join('')}</ol>` : '';
     if (skipped) h += `<button class="lnk skipnote" data-act="cmtShowHidden">${S.cmt.showHidden ? '뺀 글 다시 감추기' : `댓글을 달 수 없는 공식 블로그·숨긴 블로그 글 ${skipped}개를 뺐어요 · 보기`}</button>`;
     return h;
@@ -640,7 +692,7 @@
   function queueTargets() {
     const C = S.cmt;
     const list = C.mode === 'search' ? C.search.items : C.buddy.items;
-    return list.filter((it) => !skipWhy(it) && !(C.marks[keyOf(it)] || {}).p);
+    return list.filter((it) => !skipWhy(it) && !(C.marks[keyOf(it)] || {}).p && (C.mode !== 'search' || !C.search.recOnly || isRec(it)));
   }
   function queueBox() {
     const C = S.cmt, v = C.qv;
@@ -653,8 +705,8 @@
     if (!n) return '';
     const other = C.mode === 'search';
     return `<div class="qbox"><button class="btn primary" data-act="queueStart">▶ 연속 소통 시작 · ${n}개</button>
-      <div class="qn">글이 차례로 열리고 댓글이 입력칸에 채워진 채 기다려요. 읽고 [등록]을 누르면 다음 글로 넘어가요.</div>
-      ${other ? `<label class="qn qchk"><input type="checkbox" data-act="buddyAuto" ${settings.cmt.buddyAuto ? 'checked' : ''}> 이웃이 아닌 블로그는 이웃 추가 창도 열기(신청은 직접 확인)</label>` : ''}</div>`;
+      <div class="qn">글이 차례로 열리고 댓글이 입력칸에 채워진 채 기다려요. 읽고 등록하면 다음 글로 넘어가요.</div>
+      ${other ? `<label class="qn qchk"><input type="checkbox" data-act="buddyAuto" ${settings.cmt.buddyAuto ? 'checked' : ''}> 댓글 카드의 [✓ 등록 + 서로이웃 신청]으로 댓글과 서로이웃 신청을 한 번에</label>` : ''}</div>`;
   }
   function cmtView() {
     const C = S.cmt;
@@ -687,9 +739,18 @@
       h += `<div class="qrow"><input class="q" type="search" placeholder="키워드 (예: 장마철 우산 보관)" value="${esc(Q.q)}" maxlength="60"><button data-act="cmtSearch">${Q.loading ? '…' : '검색'}</button></div>`;
       if (Q.error) h += `<div class="empty">검색 결과를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</div>`;
       else if (Q.done && !Q.items.length && !Q.loading) h += `<div class="empty">검색된 블로그 글이 없어요.</div>`;
-      else h += itemList(Q.items, 'search');
+      else {
+        if (Q.items.length) {
+          const usable = Q.items.filter((it) => !skipWhy(it));
+          const recN = usable.filter(isRec).length;
+          h += `<div class="recbar"><span>${Q.recOnly ? `추천 글 <b>${recN}</b>개` : `전체 <b>${usable.length}</b>개 · 추천 ${recN}개`} · 블로그 점수 ${REC_MIN}점 이상이거나 검색 상위 ${REC_TOP}위${Q.scoring ? ` <i>· 점수 확인 중 ${Q.scoring.done}/${Q.scoring.total}</i>` : ''}</span>
+            <button class="lnk" data-act="recToggle">${Q.recOnly ? '전체 보기' : '추천만 보기'}</button></div>`;
+          if (Q.recOnly && !recN && !Q.scoring) h += `<div class="empty">추천 기준에 맞는 글이 없어요. [전체 보기]로 모든 글을 볼 수 있어요.</div>`;
+        }
+        h += itemList(Q.items, 'search');
+      }
     }
-    h += `<div class="note">글을 누르면 새 탭으로 이동해 댓글창이 열리고, 그 글에 맞춘 댓글이 복사돼요. 댓글창에 붙여 넣고 고친 뒤 등록은 직접 눌러 주세요.</div>`;
+    h += `<div class="note">글을 누르면 새 탭에서 댓글창이 열리고, 그 글에 맞춘 댓글이 준비돼요. 읽고 고친 뒤 카드의 <b>✓ 등록</b>(이웃이 아니면 <b>등록 + 서로이웃 신청</b>)을 누르면 한 번에 끝나요.</div>`;
     return h;
   }
 
@@ -819,8 +880,9 @@
     else if (act === 'nbOpen') {
       const it = (t.dataset.src === 'search' ? S.cmt.search.items : S.cmt.buddy.items)[Number(t.dataset.i)];
       if (it) chrome.runtime.sendMessage({ type: 'nbx-cmt-nb-open', blogId: it.blogId, nick: it.nick })
-        .then((r) => flash(r && r.ok ? '이웃 추가 창을 열었어요. 메시지를 확인하고 신청을 눌러 주세요.' : r && r.error === 'day-limit' ? '오늘은 이웃 추가 창을 충분히 열었어요(하루 50개).' : '이웃 추가 창을 열지 못했어요.')).catch(() => {});
+        .then((r) => flash(r && r.ok ? (r.auto ? '서로이웃 신청 창에서 신청까지 진행해요.' : '이웃 추가 창을 열었어요. 메시지를 확인하고 신청을 눌러 주세요.') : r && r.error === 'day-limit' ? '오늘은 이웃 신청을 충분히 했어요(하루 50개).' : '이웃 추가 창을 열지 못했어요.')).catch(() => {});
     }
+    else if (act === 'recToggle') { S.cmt.search.recOnly = !S.cmt.search.recOnly; render(); }
     else if (act === 'cmtHide') setHidden(t.dataset.b, true);
     else if (act === 'cmtUnhide') setHidden(t.dataset.b, false);
     else if (act === 'cmtShowHidden') { S.cmt.showHidden = !S.cmt.showHidden; render(); }
@@ -839,10 +901,19 @@
       if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); S.cmt.search.q = e.target.value; runSearch(); }
     }
   });
+  const NBRES = { mutual: '✓ 서로이웃 신청함', follow: '✓ 이웃 추가함', already: '✓ 이미 이웃' };
+  chrome.runtime.onMessage.addListener((m, sender) => {
+    if (sender.id === chrome.runtime.id && m && m.type === 'nbx-nb-result' && NBRES[m.result]) {
+      S.cmt.nbRes[String(m.blogId).toLowerCase()] = m.result;
+      if (S.open && S.tab === 'cmt') { render(); flash(NBRES[m.result].replace('✓ ', '') + ' ✓'); }
+    }
+    return false;
+  });
   function openCmt() {
     render();
     if (!S.cmt.started) {
       S.cmt.started = true;
+      chrome.storage.local.get('nbxBuddyLog').then((r) => { const sent = (r && r.nbxBuddyLog && r.nbxBuddyLog.sent) || {}; Object.keys(sent).forEach((k) => { if (sent[k] && sent[k].r) S.cmt.nbRes[k] = sent[k].r; }); }).catch(() => {});
       chrome.storage.local.get('nbxQueueView').then((r) => { const v = r && r.nbxQueueView; S.cmt.qv = v && Date.now() - (v.at || 0) < 6 * 3600e3 ? v : null; }).catch(() => {});
       loadHidden().then(() => loadBuddy(false));
     } else refreshMarks();
@@ -896,6 +967,12 @@
   chrome.storage.onChanged.addListener((c, area) => {
     if (area === 'local' && c[POS_KEY] && !drag) { const v = c[POS_KEY].newValue; pos = v && Number.isFinite(v.x) ? { x: v.x, y: v.y } : null; applyPos(); }
     if (area === 'sync' && c.nbx) { settings = NBX.merge(c.nbx.newValue); render(); }
+    if (area === 'local' && c.nbxBuddyLog) {
+      const sent = (c.nbxBuddyLog.newValue && c.nbxBuddyLog.newValue.sent) || {};
+      let ch = false;
+      Object.keys(sent).forEach((k) => { if (sent[k] && sent[k].r && S.cmt.nbRes[k] !== sent[k].r) { S.cmt.nbRes[k] = sent[k].r; ch = true; } });
+      if (ch && S.open && S.tab === 'cmt') render();
+    }
     if (area === 'local' && c.nbxQueueView) { S.cmt.qv = c.nbxQueueView.newValue || null; if (S.tab === 'cmt') { render(); refreshMarks(); } }
   });
 
@@ -1028,6 +1105,9 @@ details{margin-top:8px}summary{cursor:pointer;font-size:12px;color:#027a38;font-
 .cm .hb+.go{margin-left:4px}.cm .hb.nb{margin-left:0;color:#027a38}.cm .hb.nb:hover{background:#e9f8ef;color:#027a38}
 .qbox{margin:0 0 8px}.qbox.on{border:1.5px solid #03a94d;background:#f2fbf6;border-radius:10px;padding:8px 10px;font-size:12px}
 .qbox .qn{display:block;font-size:11px;color:#6b7280;margin-top:4px;line-height:1.45}.qbox .qa{display:flex;gap:6px;margin-top:6px}.qbox .qa .btn{margin:0;flex:1}
+.cb{display:flex;gap:4px;margin:2px 0 1px}.rk,.bsc{font-size:10.5px;font-weight:800;border-radius:6px;padding:0 5px;line-height:17px;white-space:nowrap}
+.rk{color:#1d4ed8;background:#eaf1ff}.bsc{color:#6b7280;background:#f0f2f5}.bsc.hi{color:#027a38;background:#e9f8ef}
+.recbar{display:flex;justify-content:space-between;align-items:flex-start;gap:6px;font-size:11.5px;color:#5b6470;margin:0 0 6px}.recbar b{color:#027a38}.recbar i{font-style:normal;color:#8a94a3}.recbar .lnk{flex:none}
 .qchk{display:flex!important;gap:5px;align-items:flex-start;cursor:pointer}.qchk input{margin:1px 0 0}.skipnote{display:block;margin:2px 0 8px;font-size:11.5px}
 .flash{position:absolute;left:0;top:44px;width:300px;background:#333;color:#fff;border-radius:10px;padding:9px 12px;font-size:12px;box-shadow:0 6px 16px rgba(0,0,0,.2)}
 `;

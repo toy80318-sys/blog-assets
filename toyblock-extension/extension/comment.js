@@ -1,7 +1,7 @@
 // 토이블록 네이버 블로그 도우미 — 이웃 소통 · 댓글 도우미
-// · 글 화면: 목록·💬 버튼으로 연 글이면 댓글창으로 이동하고, 그 글에 맞춘 댓글 초안을 클립보드에 복사해 둡니다.
+// · 글 화면: 목록·💬 버튼으로 연 글이면 댓글창으로 이동하고, 그 글에 맞춘 댓글 초안을 입력칸에 채워 둡니다.
 // · 네이버 검색 · 이웃새글 화면: 블로그 글 옆에 💬 댓글 버튼을 붙입니다.
-// 등록 버튼은 항상 사용자가 직접 누릅니다.
+// 댓글은 사용자가 네이버 [등록]이나 카드의 [✓ 등록 + 서로이웃 신청]을 눌렀을 때만 올라갑니다(누르기 전까지 고칠 수 있음).
 (() => {
   const NBX = globalThis.NBX;
   if (!NBX) return;
@@ -47,6 +47,11 @@
 .qb .qa{display:flex;gap:6px;margin-top:6px}.qb .qa button{flex:1;border:1px solid #03a94d;background:#fff;color:#027a38;border-radius:8px;padding:4px 0;font:inherit;font-size:11.5px;font-weight:700;cursor:pointer}
 .qb .qa button.p{background:#03a94d;color:#fff}.qb .qa button[hidden]{display:none}
 .card.min .qb{display:none!important}
+.go{display:none;gap:6px;margin:0 0 7px}.go.on{display:flex}
+.go button{border:1px solid #03a94d;background:#fff;color:#027a38;border-radius:9px;padding:7px 8px;font:inherit;font-size:12.5px;font-weight:800;cursor:pointer}
+.go button.p{flex:1;background:#03a94d;color:#fff}.go button[hidden]{display:none}.go button:disabled{opacity:.55;cursor:default}
+.go button.done{background:#e9f8ef;color:#027a38;border-color:#bfe8cf}.go button.done:disabled{opacity:1}
+.card.min .go{display:none!important}
 `;
 
   const host = location.hostname;
@@ -342,7 +347,7 @@
       if (W) { const h = hostEl; W.onRetire(() => h.remove()); } // 위쪽 문서에 붙인 카드도 거둡니다
       hostEl.id = 'nbx-cmt-host';
       root = hostEl.attachShadow({ mode: 'open' });
-      root.innerHTML = `<style>${CSS}</style><div class="card"><div class="hd" data-a="expand"><b>💬 토이블록 댓글 도우미</b><span><button class="x" data-a="min" title="접기">—</button><button class="x" data-a="close" title="닫기">✕</button></span></div><div class="qb"><div class="qt"></div><div class="qn"></div><div class="qa"><button data-a="qnb" hidden>＋ 이웃 추가</button><button data-a="qresume" class="p" hidden>이어 하기</button><button data-a="qskip">건너뛰기 →</button><button data-a="qstop">멈추기</button></div></div><div class="st"></div><div class="note"></div><div class="list"></div><div class="tools"><button data-a="regen">↻ 다시 만들기</button><button data-a="tpl">템플릿으로</button></div><div class="ft"><span class="stats"></span><span class="links"><button class="lk" data-a="diag">진단 정보 복사</button><button class="lk" data-a="settings">설정</button></span></div></div><div class="toast"></div>`;
+      root.innerHTML = `<style>${CSS}</style><div class="card"><div class="hd" data-a="expand"><b>💬 토이블록 댓글 도우미</b><span><button class="x" data-a="min" title="접기">—</button><button class="x" data-a="close" title="닫기">✕</button></span></div><div class="qb"><div class="qt"></div><div class="qn"></div><div class="qa"><button data-a="qresume" class="p" hidden>이어 하기</button><button data-a="qskip">건너뛰기 →</button><button data-a="qstop">멈추기</button></div></div><div class="st"></div><div class="go"><button data-a="post" class="p">✓ 댓글 등록</button><button data-a="nb" hidden>＋ 서로이웃</button></div><div class="note"></div><div class="list"></div><div class="tools"><button data-a="regen">↻ 다시 만들기</button><button data-a="tpl">템플릿으로</button></div><div class="ft"><span class="stats"></span><span class="links"><button class="lk" data-a="diag">진단 정보 복사</button><button class="lk" data-a="settings">설정</button></span></div></div><div class="toast"></div>`;
       (hostDoc.body || hostDoc.documentElement).appendChild(hostEl);
       root.addEventListener('click', onCardClick);
       placeCard();
@@ -410,18 +415,116 @@
       const running = v.state === 'run';
       btn('qskip').hidden = !running; btn('qstop').hidden = !(running || v.state === 'paused');
       btn('qresume').hidden = v.state !== 'paused';
-      btn('qnb').hidden = !(running && active.job.relation === 'other');
       const t = qb.querySelector('.qt'), n = qb.querySelector('.qn');
       if (v.state === 'done') { t.innerHTML = '<b>연속 소통 끝 ✓</b>'; n.textContent = `등록 ${v.done}개 · 건너뜀 ${v.skipped}개. 수고했어요!`; }
       else if (v.state === 'stopped') { t.innerHTML = '<b>연속 소통을 멈췄어요</b>'; n.textContent = v.note || '목록에서 다시 시작할 수 있어요.'; }
       else if (v.state === 'paused') { t.innerHTML = '<b>잠시 쉬어 가요</b>'; n.textContent = v.note; }
-      else { t.innerHTML = `<b>연속 소통 ${q.n}/${q.total}</b>`; n.textContent = active.posted ? '등록했어요 ✓ 곧 다음 글로 넘어가요.' : '댓글을 확인하고 [등록]을 누르면 다음 글로 넘어가요.'; }
+      else { t.innerHTML = `<b>연속 소통 ${q.n}/${q.total}</b>`; n.textContent = active.posted ? (active.nb === 'wait' ? '등록했어요 ✓ 서로이웃 신청을 마치면 다음 글로 넘어가요.' : '등록했어요 ✓ 곧 다음 글로 넘어가요.') : '댓글을 확인하고 등록하면 다음 글로 넘어가요.'; }
       placeSoon();
     }
     chrome.runtime.onMessage.addListener((m, sender) => {
       if (sender.id === chrome.runtime.id && m && m.type === 'nbx-queue-state' && active && active.job.queue) renderQueue(m.view);
       return false;
     });
+    // ── 한 번에: [✓ 등록 + 서로이웃 신청] ──
+    // 사용자가 이 버튼을 누르면, 입력칸에 있는 댓글(고친 그대로)을 네이버 [등록]으로 올리고, 이 블로그에 서로이웃 신청 창을 엽니다.
+    const nbLabel = () => (settings.cmt.buddyType === 'follow' ? '이웃 추가' : '서로이웃 신청');
+    const wantsBuddy = () => !!active && active.job.relation !== 'buddy' && settings.cmt.buddyAuto !== false && !active.nb;
+    function renderGo() {
+      const go = $('.go');
+      if (!go || !active) return;
+      const post = go.querySelector('[data-a="post"]'), nb = go.querySelector('[data-a="nb"]');
+      go.classList.toggle('on', !active.login && !!(active.drafts && active.drafts.length));
+      const NB = { wait: '신청 중…', mutual: '서로이웃 신청함 ✓', follow: '이웃 추가함 ✓', already: '이미 이웃 ✓' };
+      if (active.posted) { post.textContent = '등록했어요 ✓'; post.disabled = true; post.classList.add('done'); }
+      else { post.textContent = wantsBuddy() ? `✓ 등록 + ${nbLabel()}` : '✓ 댓글 등록'; post.disabled = !!active.posting; post.classList.remove('done'); }
+      const showNb = active.job.relation !== 'buddy' && (!!active.nb || !wantsBuddy() || active.posted);
+      nb.hidden = !showNb;
+      nb.textContent = NB[active.nb] || `＋ ${nbLabel()}`;
+      nb.disabled = !!NB[active.nb];
+      nb.classList.toggle('done', !!NB[active.nb] && active.nb !== 'wait');
+      placeSoon();
+    }
+    async function openNb(hold) {
+      active.nb = 'wait';
+      renderGo();
+      const r = await send({ type: 'nbx-cmt-nb-open', blogId: active.post.blogId, nick: active.post.nick || active.job.nick, hold: !!hold });
+      if (r && r.ok) { toast(r.auto ? `${nbLabel()} 창에서 신청까지 진행해요` : '이웃 추가 창을 열었어요. 메시지를 확인하고 신청을 눌러 주세요.'); return true; }
+      active.nb = '';
+      renderGo();
+      toast(r && r.error === 'day-limit' ? '오늘은 이웃 신청을 충분히 했어요(하루 50개).' : '이웃 추가 창을 열지 못했어요.');
+      return false;
+    }
+    // 서로이웃 신청 결과(이웃 추가 창이 알려 줌)
+    let nbTimer = null;
+    function onNbResult(m) {
+      if (!active || String(m.blogId).toLowerCase() !== String(active.post.blogId || '').toLowerCase()) return;
+      clearTimeout(nbTimer);
+      const ok = m.result === 'mutual' || m.result === 'follow' || m.result === 'already';
+      active.nb = ok ? m.result : '';
+      const T = { mutual: '서로이웃 신청을 보냈어요 ✓', follow: '이웃으로 추가했어요 ✓', already: '이미 이웃이거나 신청한 블로그예요', closed: '이웃 추가 창이 닫혔어요', cancel: '이웃 추가 창을 닫았어요' };
+      toast(T[m.result] || '서로이웃 신청을 마치지 못했어요');
+      renderGo();
+      if (active.holdQueue) releaseQueue();
+    }
+    function releaseQueue() {
+      if (!active || !active.holdQueue) return;
+      active.holdQueue = false;
+      if (active.job.queue) { renderQueue(); send({ type: 'nbx-cmt-queue-posted', blogId: active.post.blogId, logNo: active.post.logNo }); }
+    }
+    // 등록이 확인되면(입력칸이 비워짐) 기록하고, 연속 소통이면 다음 글로
+    function onPosted(hold) {
+      const { blogId, logNo } = active.post;
+      active.posted = true;
+      active.lastFilled = '';
+      return send({ type: 'nbx-cmt-posted', blogId, logNo, hold: !!hold }).then((r) => {
+        if (r && r.stats) setStats(r.stats);
+        if (hostEl && hostEl.isConnected) setStatus(active.job.queue ? (hold ? '등록했어요 ✓ 서로이웃 신청을 마치면 다음 글로 넘어가요.' : '등록했어요 ✓ 곧 다음 글로 넘어가요.') : '등록했어요 ✓ 다음 글도 천천히 읽고 남겨 주세요.', 'ok');
+        if (active.job.queue) renderQueue();
+        renderGo();
+      });
+    }
+    async function postNow(withBuddy) {
+      if (active.posting || active.posted) return;
+      if (!inputOf(active.box)) active.box = await openCommentBox(active.post.logNo);
+      if (active.box && active.box.login) { active.login = true; toast('댓글을 쓰려면 네이버에 로그인해 주세요.'); return; }
+      const input = inputOf(active.box);
+      if (!input) { toast('댓글창을 찾지 못했어요. 글 아래 "댓글"을 눌러 연 뒤 다시 눌러 주세요.'); return; }
+      if (!clean(valueOf(input))) {
+        const d = active.drafts && active.drafts[active.sel];
+        if (!d || !prefill(input, d.text)) { toast('댓글창에 댓글을 넣지 못했어요.'); return; }
+        active.lastFilled = d.text;
+      }
+      const wrap = (active.box && active.box.wrap) || input.closest('.u_cbox_write_wrap, .u_cbox_write_box, .u_cbox_write, .u_cbox') || document;
+      const btn = first('submit', wrap) || first('submit');
+      if (!btn || !shown(btn)) { markSubmit(); toast('등록 버튼을 찾지 못했어요. 빨간 테두리 버튼을 직접 눌러 주세요.'); return; }
+      active.posting = true;
+      renderGo();
+      setStatus('등록하는 중…');
+      btn.click();
+      const gone = await waitFor(() => { const now = findInput(); return !now || !clean(valueOf(now)) ? true : null; }, 6000, 250);
+      active.posting = false;
+      if (!gone) { markSubmit(); setStatus('등록이 확인되지 않았어요. 네이버 안내를 확인하고 [등록]을 직접 눌러 주세요.', 'err'); renderGo(); return; }
+      const hold = withBuddy && !!active.job.queue;
+      if (hold) active.holdQueue = true;
+      await onPosted(hold);
+      if (withBuddy) {
+        const opened = await openNb(hold);
+        if (!opened) releaseQueue();
+        else if (hold) nbTimer = setTimeout(releaseQueue, 40000); // 창에서 끝나지 않아도 40초 뒤에는 다음 글로
+      }
+    }
+    chrome.runtime.onMessage.addListener((m, sender, reply) => {
+      if (sender.id !== chrome.runtime.id || !m) return false;
+      if (m.type === 'nbx-nb-result') onNbResult(m);
+      if (m.type === 'nbx-cmt-whois') {
+        // 블로그의 이웃추가 버튼으로 열린 창이 이 글의 닉네임을 물어볼 때(글이 있는 프레임만 대답)
+        const p = active ? active.post : postContainer() ? readPost(null) : null;
+        if (p && p.blogId) { reply({ blogId: p.blogId, nick: p.nick }); return false; }
+      }
+      return false;
+    });
+
     // 등록 버튼을 눈에 띄게(누르지는 않음)
     function markSubmit() {
       const b = first('submit');
@@ -489,6 +592,7 @@
       else if (copied) setStatus(`${by} 만든 1번이 복사됐어요 — 댓글창에 ${PASTE}` + where, 'ok');
       else setStatus('초안을 만들었어요. 원하는 댓글의 [복사]를 눌러 주세요.' + where);
       if (copied) toast(filled ? '댓글창에 넣어 두었어요' : `댓글이 복사됐어요 — 댓글창에 ${PASTE}`);
+      renderGo();
     }
 
     async function onCardClick(e) {
@@ -502,11 +606,8 @@
       if (a === 'qskip') { b.disabled = true; const r = await send({ type: 'nbx-cmt-queue-next' }); if (!r || !r.ok) { b.disabled = false; toast('지금은 건너뛸 수 없어요'); } return; }
       if (a === 'qstop') { const r = await send({ type: 'nbx-cmt-queue-stop' }); if (r && r.view) renderQueue(r.view); return; }
       if (a === 'qresume') { await send({ type: 'nbx-cmt-queue-resume' }); return; }
-      if (a === 'qnb') {
-        const r = await send({ type: 'nbx-cmt-nb-open', blogId: active.post.blogId, nick: active.post.nick || active.job.nick });
-        toast(r && r.ok ? '이웃 추가 창을 열었어요. 메시지를 확인하고 신청을 눌러 주세요.' : r && r.error === 'day-limit' ? '오늘은 이웃 추가 창을 충분히 열었어요(하루 50개).' : '이웃 추가 창을 열지 못했어요.');
-        return;
-      }
+      if (a === 'post') { await postNow(wantsBuddy()); return; }
+      if (a === 'nb') { if (!active.nb) await openNb(false); return; }
       const i = Number(b.dataset.i);
       const d = active.drafts && active.drafts[i];
       if (a === 'copy' && d) {
@@ -550,16 +651,11 @@
         if (!isSubmit(e.target) || inReply(e.target)) return;
         const input = findInput();
         if (!clean(valueOf(input))) return;
-        const { blogId, logNo } = active.post;
+        if (active.posting || active.posted) return;
         setTimeout(() => {
           const now = findInput();
           if (now && clean(valueOf(now))) return; // 아직 글이 남아 있으면 등록이 안 된 것으로 봅니다
-          send({ type: 'nbx-cmt-posted', blogId, logNo }).then((r) => {
-            if (r && r.stats) setStats(r.stats);
-            active.lastFilled = '';
-            if (hostEl && hostEl.isConnected) setStatus(active.job.queue ? '등록했어요 ✓ 곧 다음 글로 넘어가요.' : '등록했어요 ✓ 다음 글도 천천히 읽고 남겨 주세요.', 'ok');
-            if (active.job.queue) { active.posted = true; renderQueue(); }
-          });
+          if (!active.posted) onPosted(false);
         }, 1500);
       }, true);
     }
@@ -567,13 +663,14 @@
     async function start(job) {
       await ready;
       const post = readPost(job);
-      active = { job, post, box: null, drafts: [], sel: 0, copied: false, lastFilled: '', login: false, busy: false };
+      active = { job, post, box: null, drafts: [], sel: 0, copied: false, lastFilled: '', login: false, busy: false, posted: false, posting: false, nb: '', holdQueue: false };
       ensureCard();
       $('.card').classList.remove('min');
       $('.list').textContent = '';
       setNote('');
       setStatus('댓글창으로 이동하는 중…');
       if (job.queue) { root.querySelector('.qb').classList.remove('on'); renderQueue({ state: 'run' }); }
+      renderGo();
       const box = await openCommentBox(post.logNo);
       if (box && box.login) { active.login = true; active.box = null; } else active.box = box;
       await generate({});

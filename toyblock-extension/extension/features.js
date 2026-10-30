@@ -122,7 +122,8 @@
       style: '',        // 말투 등 추가 요청
       linkButtons: true, // 네이버 검색·이웃새글 화면에 💬 댓글 버튼
       // 연속 소통(반자동) — 이웃 추가: 이웃 추가 창을 열고 메시지만 채워 둡니다(확인은 사용자가 직접)
-      buddyAuto: true,   // 연속 소통에서 이웃이 아닌 블로그는 이웃 추가 창도 열기
+      buddyAuto: true,   // 이웃이 아닌 블로그 글은 댓글 카드에 [등록 + 서로이웃 신청] 한 번에 버튼
+      buddyOneClick: true, // 사용자가 누른 이웃 추가 창(토이블록 버튼·블로그의 이웃추가 버튼)은 서로이웃 신청까지 바로 마치기
       buddyType: 'mutual', // mutual = 서로이웃 신청, follow = 이웃으로만 추가
       buddyMsg: ''       // 서로이웃 신청 메시지(비어 있으면 기본 문구). {닉네임} → ○○님
     }
@@ -207,6 +208,7 @@
       style: typeof c.style === 'string' ? c.style.slice(0, 300) : '',
       linkButtons: c.linkButtons !== false,
       buddyAuto: c.buddyAuto !== false,
+      buddyOneClick: c.buddyOneClick !== false,
       buddyType: c.buddyType === 'follow' ? 'follow' : 'mutual',
       buddyMsg: typeof c.buddyMsg === 'string' ? c.buddyMsg.replace(/[<>]/g, '').slice(0, 200) : ''
     };
