@@ -120,7 +120,11 @@
       prefill: false,   // 복사와 함께 댓글 입력칸에 바로 채우기
       prefetch: false,  // 목록의 다음 글 댓글을 미리 만들어 두기
       style: '',        // 말투 등 추가 요청
-      linkButtons: true // 네이버 검색·이웃새글 화면에 💬 댓글 버튼
+      linkButtons: true, // 네이버 검색·이웃새글 화면에 💬 댓글 버튼
+      // 연속 소통(반자동) — 이웃 추가: 이웃 추가 창을 열고 메시지만 채워 둡니다(확인은 사용자가 직접)
+      buddyAuto: true,   // 연속 소통에서 이웃이 아닌 블로그는 이웃 추가 창도 열기
+      buddyType: 'mutual', // mutual = 서로이웃 신청, follow = 이웃으로만 추가
+      buddyMsg: ''       // 서로이웃 신청 메시지(비어 있으면 기본 문구). {닉네임} → ○○님
     }
   };
 
@@ -159,6 +163,13 @@
     if (OFFICIAL_IDS.has(id) || /^naver_/.test(id)) return true;
     return [x.nick, x.blogName].some((t) => typeof t === 'string' && OFFICIAL_RE.test(t.trim()));
   }
+  // 서로이웃 신청 메시지: {닉네임}을 ○○님으로(부르기 어색한 닉네임이면 빼고)
+  const BUDDY_MSG = '{닉네임} 글 잘 보고 가요. 서로이웃 하고 자주 소통해요^^';
+  function buddyMessage(tpl, nick, callable) {
+    const t = (typeof tpl === 'string' && tpl.trim() ? tpl.trim() : BUDDY_MSG).slice(0, 200);
+    const name = nick && (!callable || callable(nick)) ? nick + '님' : '';
+    return t.replace(/\{닉네임\}\s*/g, name ? name + ' ' : '').replace(/\s{2,}/g, ' ').trim();
+  }
   const maskKey = (k) => (typeof k === 'string' && k.length > 12 ? k.slice(0, 6) + '…' + k.slice(-4) : '');
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -194,7 +205,10 @@
       prefill: c.prefill === true,
       prefetch: c.prefetch === true,
       style: typeof c.style === 'string' ? c.style.slice(0, 300) : '',
-      linkButtons: c.linkButtons !== false
+      linkButtons: c.linkButtons !== false,
+      buddyAuto: c.buddyAuto !== false,
+      buddyType: c.buddyType === 'follow' ? 'follow' : 'mutual',
+      buddyMsg: typeof c.buddyMsg === 'string' ? c.buddyMsg.replace(/[<>]/g, '').slice(0, 200) : ''
     };
     return out;
   }
@@ -255,6 +269,6 @@
     } catch (_) { return false; }
   }
 
-  g.NBX = { AI_PROVIDERS, PROVIDER_IDS, KEY_PROVIDERS, MODEL_RE, detectKey, maskKey, isOfficialBlog, modelOf, PARTNER, applyRemote, remoteSelectors, FEATURES, QUOTE_STYLES, FONTS, SIZES, SLOT_COUNT, DEFAULTS, merge, clone, keyLabel, byId, emptyStyle, defaultKey,
+  g.NBX = { AI_PROVIDERS, PROVIDER_IDS, KEY_PROVIDERS, MODEL_RE, detectKey, maskKey, isOfficialBlog, BUDDY_MSG, buddyMessage, modelOf, PARTNER, applyRemote, remoteSelectors, FEATURES, QUOTE_STYLES, FONTS, SIZES, SLOT_COUNT, DEFAULTS, merge, clone, keyLabel, byId, emptyStyle, defaultKey,
     VERSION: VER, world: IN_PAGE ? g.__nbxWorld : null, foreignCopy };
 })(globalThis);

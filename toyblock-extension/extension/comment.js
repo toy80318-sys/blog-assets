@@ -42,6 +42,11 @@
 .lk{border:0;background:none;color:#8a94a3;font:inherit;font-size:11px;text-decoration:underline;cursor:pointer;padding:0 0 0 6px}
 .toast{position:fixed;left:50%;top:18px;transform:translate(-50%,-30px);opacity:0;transition:.25s;z-index:2147483001;background:#1f2328;color:#fff;border-radius:10px;padding:9px 14px;font:700 13px/1.4 -apple-system,"Malgun Gothic",sans-serif;box-shadow:0 8px 20px rgba(0,0,0,.25);pointer-events:none;white-space:nowrap}
 .toast.on{opacity:1;transform:translate(-50%,0)}
+.qb{display:none;border:1.5px solid #03a94d;background:#f2fbf6;border-radius:10px;padding:7px 9px;margin-bottom:6px;font-size:12px;color:#1f3d2b}
+.qb.on{display:block}.qb b{color:#027a38}.qb .qn{font-size:11.5px;color:#5b6470;margin-top:2px}
+.qb .qa{display:flex;gap:6px;margin-top:6px}.qb .qa button{flex:1;border:1px solid #03a94d;background:#fff;color:#027a38;border-radius:8px;padding:4px 0;font:inherit;font-size:11.5px;font-weight:700;cursor:pointer}
+.qb .qa button.p{background:#03a94d;color:#fff}.qb .qa button[hidden]{display:none}
+.card.min .qb{display:none!important}
 `;
 
   const host = location.hostname;
@@ -337,7 +342,7 @@
       if (W) { const h = hostEl; W.onRetire(() => h.remove()); } // 위쪽 문서에 붙인 카드도 거둡니다
       hostEl.id = 'nbx-cmt-host';
       root = hostEl.attachShadow({ mode: 'open' });
-      root.innerHTML = `<style>${CSS}</style><div class="card"><div class="hd" data-a="expand"><b>💬 토이블록 댓글 도우미</b><span><button class="x" data-a="min" title="접기">—</button><button class="x" data-a="close" title="닫기">✕</button></span></div><div class="st"></div><div class="note"></div><div class="list"></div><div class="tools"><button data-a="regen">↻ 다시 만들기</button><button data-a="tpl">템플릿으로</button></div><div class="ft"><span class="stats"></span><span class="links"><button class="lk" data-a="diag">진단 정보 복사</button><button class="lk" data-a="settings">설정</button></span></div></div><div class="toast"></div>`;
+      root.innerHTML = `<style>${CSS}</style><div class="card"><div class="hd" data-a="expand"><b>💬 토이블록 댓글 도우미</b><span><button class="x" data-a="min" title="접기">—</button><button class="x" data-a="close" title="닫기">✕</button></span></div><div class="qb"><div class="qt"></div><div class="qn"></div><div class="qa"><button data-a="qnb" hidden>＋ 이웃 추가</button><button data-a="qresume" class="p" hidden>이어 하기</button><button data-a="qskip">건너뛰기 →</button><button data-a="qstop">멈추기</button></div></div><div class="st"></div><div class="note"></div><div class="list"></div><div class="tools"><button data-a="regen">↻ 다시 만들기</button><button data-a="tpl">템플릿으로</button></div><div class="ft"><span class="stats"></span><span class="links"><button class="lk" data-a="diag">진단 정보 복사</button><button class="lk" data-a="settings">설정</button></span></div></div><div class="toast"></div>`;
       (hostDoc.body || hostDoc.documentElement).appendChild(hostEl);
       root.addEventListener('click', onCardClick);
       placeCard();
@@ -393,6 +398,35 @@
       if (s.hour >= 20) return `최근 1시간에 댓글 ${s.hour}개를 등록했어요. 잠시 쉬었다가 이어 가는 게 좋아요.`;
       return '';
     }
+    // 연속 소통 막대: 몇 번째 글인지, 건너뛰기·멈추기, 멈춘 뒤 이어 하기
+    function renderQueue(v) {
+      const qb = $('.qb');
+      if (!qb || !active || !active.job.queue) return;
+      const q = active.job.queue;
+      v = v || active.qview || { state: 'run' };
+      active.qview = v;
+      qb.classList.add('on');
+      const btn = (a) => root.querySelector(`.qb [data-a="${a}"]`);
+      const running = v.state === 'run';
+      btn('qskip').hidden = !running; btn('qstop').hidden = !(running || v.state === 'paused');
+      btn('qresume').hidden = v.state !== 'paused';
+      btn('qnb').hidden = !(running && active.job.relation === 'other');
+      const t = qb.querySelector('.qt'), n = qb.querySelector('.qn');
+      if (v.state === 'done') { t.innerHTML = '<b>연속 소통 끝 ✓</b>'; n.textContent = `등록 ${v.done}개 · 건너뜀 ${v.skipped}개. 수고했어요!`; }
+      else if (v.state === 'stopped') { t.innerHTML = '<b>연속 소통을 멈췄어요</b>'; n.textContent = v.note || '목록에서 다시 시작할 수 있어요.'; }
+      else if (v.state === 'paused') { t.innerHTML = '<b>잠시 쉬어 가요</b>'; n.textContent = v.note; }
+      else { t.innerHTML = `<b>연속 소통 ${q.n}/${q.total}</b>`; n.textContent = active.posted ? '등록했어요 ✓ 곧 다음 글로 넘어가요.' : '댓글을 확인하고 [등록]을 누르면 다음 글로 넘어가요.'; }
+      placeSoon();
+    }
+    chrome.runtime.onMessage.addListener((m, sender) => {
+      if (sender.id === chrome.runtime.id && m && m.type === 'nbx-queue-state' && active && active.job.queue) renderQueue(m.view);
+      return false;
+    });
+    // 등록 버튼을 눈에 띄게(누르지는 않음)
+    function markSubmit() {
+      const b = first('submit');
+      if (b && !b.dataset.nbxMark) { b.dataset.nbxMark = '1'; b.style.outline = '3px solid #e83232'; b.style.outlineOffset = '2px'; }
+    }
     function renderDrafts() {
       const list = $('.list');
       list.textContent = '';
@@ -444,7 +478,8 @@
       active.drafts = r.drafts;
       active.sel = 0;
       const copied = await copySelected();
-      const filled = settings.cmt.prefill ? autoFill(r.drafts[0].text) : false;
+      const filled = settings.cmt.prefill || active.job.queue ? autoFill(r.drafts[0].text) : false;
+      if (filled && active.job.queue) markSubmit();
       setStats(r.stats);
       setNote([r.note, pacing(r.stats)].filter(Boolean).join(' '));
       const ro = (w) => { const c = String(w).charCodeAt(String(w).length - 1); const f = c >= 0xac00 && c <= 0xd7a3 ? (c - 0xac00) % 28 : 0; return w + (f && f !== 8 ? '으로' : '로'); };
@@ -464,6 +499,14 @@
       if (a === 'min') { e.stopPropagation(); $('.card').classList.add('min'); placeCard(); return; }
       if (a === 'expand') { if ($('.card').classList.contains('min')) { $('.card').classList.remove('min'); placeCard(); } return; }
       if (!active) return;
+      if (a === 'qskip') { b.disabled = true; const r = await send({ type: 'nbx-cmt-queue-next' }); if (!r || !r.ok) { b.disabled = false; toast('지금은 건너뛸 수 없어요'); } return; }
+      if (a === 'qstop') { const r = await send({ type: 'nbx-cmt-queue-stop' }); if (r && r.view) renderQueue(r.view); return; }
+      if (a === 'qresume') { await send({ type: 'nbx-cmt-queue-resume' }); return; }
+      if (a === 'qnb') {
+        const r = await send({ type: 'nbx-cmt-nb-open', blogId: active.post.blogId, nick: active.post.nick || active.job.nick });
+        toast(r && r.ok ? '이웃 추가 창을 열었어요. 메시지를 확인하고 신청을 눌러 주세요.' : r && r.error === 'day-limit' ? '오늘은 이웃 추가 창을 충분히 열었어요(하루 50개).' : '이웃 추가 창을 열지 못했어요.');
+        return;
+      }
       const i = Number(b.dataset.i);
       const d = active.drafts && active.drafts[i];
       if (a === 'copy' && d) {
@@ -514,7 +557,8 @@
           send({ type: 'nbx-cmt-posted', blogId, logNo }).then((r) => {
             if (r && r.stats) setStats(r.stats);
             active.lastFilled = '';
-            if (hostEl && hostEl.isConnected) setStatus('등록했어요 ✓ 다음 글도 천천히 읽고 남겨 주세요.', 'ok');
+            if (hostEl && hostEl.isConnected) setStatus(active.job.queue ? '등록했어요 ✓ 곧 다음 글로 넘어가요.' : '등록했어요 ✓ 다음 글도 천천히 읽고 남겨 주세요.', 'ok');
+            if (active.job.queue) { active.posted = true; renderQueue(); }
           });
         }, 1500);
       }, true);
@@ -529,6 +573,7 @@
       $('.list').textContent = '';
       setNote('');
       setStatus('댓글창으로 이동하는 중…');
+      if (job.queue) { root.querySelector('.qb').classList.remove('on'); renderQueue({ state: 'run' }); }
       const box = await openCommentBox(post.logNo);
       if (box && box.login) { active.login = true; active.box = null; } else active.box = box;
       await generate({});

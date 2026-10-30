@@ -752,6 +752,7 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
     case 'nbx-cmt-copy': return run(copyText(msg.text).then((ok) => ({ ok })));
     case 'nbx-cmt-posted': {
       const key = postKeyOf(msg.blogId, msg.logNo);
+      if (sender.tab) queueOnPosted(sender.tab.id, key);
       return run(withLog((log) => {
         const now = Date.now();
         const e = log.posts[key] || {};
@@ -774,6 +775,14 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
     case 'nbx-cmt-search': return typeof msg.q === 'string' && msg.q.trim() ? run(searchPosts(msg.q.trim())) : false;
     case 'nbx-cmt-log': return run(cmtLogFor(msg.keys));
     case 'nbx-ai-test': return run(aiTest(msg.provider));
+    case 'nbx-cmt-queue-start': return run(queueStart(msg, sender));
+    case 'nbx-cmt-queue-next': return run(queueAdvance('skip', sender.tab && sender.tab.id));
+    case 'nbx-cmt-queue-resume': return run(queueResume());
+    case 'nbx-cmt-queue-stop': return run(queueStop('사용자가 멈춤'));
+    case 'nbx-cmt-queue-state': return run(getQueue().then(viewOf));
+    case 'nbx-cmt-nb-open': return run(openBuddy({ blogId: msg.blogId, nick: msg.nick }, true));
+    case 'nbx-cmt-nb-hello': return run(buddyHello(sender));
+    case 'nbx-cmt-nb-filled': return run(buddyFilled(sender, msg));
     default: return false;
   }
 });
@@ -876,3 +885,165 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
     default: return false;
   }
 });
+
+// ───────────── 연속 소통(반자동) ─────────────
+// 목록의 글을 한 탭에서 차례로 엽니다. 글마다 댓글을 입력칸에 채워 두고, 사용자가 직접 [등록]을 누르면 다음 글로 넘어갑니다.
+// 이웃이 아닌 블로그는 네이버 이웃 추가 창을 열어 신청 메시지만 채워 둡니다([확인]은 사용자가 직접).
+// 확장은 댓글 등록 버튼도, 이웃 신청 확인 버튼도 누르지 않습니다.
+const QUEUE_MAX = 50;          // 한 번에 차례로 열 글 수
+const QUEUE_NEXT_MS = 2500;    // 등록 뒤 다음 글로 넘어가기까지
+const HOUR_PAUSE = 20;         // 최근 1시간 댓글이 이만큼이면 잠시 멈춤
+const BUDDY_DAY_MAX = 50;      // 하루에 여는 이웃 추가 창 수
+const BUDDY_AGAIN_DAYS = 30;   // 한 번 신청 창을 연 블로그는 이 기간 동안 다시 열지 않음
+const dayKey = (t = Date.now()) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+async function getQueue() { const r = await chrome.storage.session.get('nbxQueue').catch(() => ({})); return (r && r.nbxQueue) || null; }
+function viewOf(q) {
+  if (!q) return { state: 'none' };
+  return { state: q.state, i: q.i, total: q.items.length, done: q.done, skipped: q.skipped, relation: q.relation, note: q.note || '', buddy: q.buddy, at: Date.now() };
+}
+async function setQueue(q) {
+  await chrome.storage.session.set({ nbxQueue: q }).catch(() => {});
+  const v = viewOf(q);
+  await chrome.storage.local.set({ nbxQueueView: v }).catch(() => {}); // 패널(네이버 화면)이 진행 상황을 볼 수 있게
+  if (q && q.tabId != null) chrome.tabs.sendMessage(q.tabId, { type: 'nbx-queue-state', view: v }).catch(() => {});
+  return v;
+}
+let queueQ = Promise.resolve();
+const queued = (fn) => { const p = queueQ.then(fn, fn); queueQ = p.catch(() => {}); return p; };
+
+const postUrl = (it) => `https://blog.naver.com/${it.blogId}/${it.logNo}`;
+async function queueJob(tabId, q) {
+  const it = q.items[q.i];
+  const J = await loadJobs();
+  J[tabId] = { blogId: it.blogId, logNo: it.logNo, title: it.title, nick: it.nick, relation: it.relation, at: Date.now(), queue: { n: q.i + 1, total: q.items.length } };
+  saveJobs();
+  logMark(postKeyOf(it.blogId, it.logNo), 'o');
+}
+function queueStart(msg, sender) {
+  return queued(async () => {
+    const relation = msg.relation === 'buddy' ? 'buddy' : 'other';
+    const items = (Array.isArray(msg.items) ? msg.items : []).filter((x) => x && ID_RE.test(x.blogId || '') && NO_RE.test(String(x.logNo || '')))
+      .slice(0, QUEUE_MAX).map((x) => ({ blogId: x.blogId, logNo: String(x.logNo), title: cleanStr(x.title, 150), nick: cleanStr(x.nick, 30), relation }));
+    if (!items.length) return { ok: false, error: 'empty' };
+    const s = await getSettings();
+    const q = { id: Date.now(), items, i: 0, done: 0, skipped: 0, relation, buddy: relation === 'other' && s.cmt.buddyAuto, state: 'run', note: '', tabId: null };
+    const props = { url: postUrl(items[0]), active: true };
+    if (sender.tab) { props.index = sender.tab.index + 1; props.openerTabId = sender.tab.id; props.windowId = sender.tab.windowId; }
+    const tab = await chrome.tabs.create(props);
+    q.tabId = tab.id;
+    await queueJob(tab.id, q);
+    await setQueue(q);
+    if (q.buddy) maybeBuddy(items[0]);
+    if (items[1]) prefetch(items[1]);
+    return { ok: true, total: items.length };
+  });
+}
+// 다음 글로: reason = 'posted'(등록함) | 'skip'(건너뜀)
+function queueAdvance(reason, fromTab) {
+  return queued(async () => {
+    const q = await getQueue();
+    if (!q || q.state !== 'run') return { ok: false, error: 'not-running' };
+    if (fromTab != null && fromTab !== q.tabId) return { ok: false, error: 'other-tab' };
+    if (reason === 'posted') q.done++; else q.skipped++;
+    q.i++;
+    if (q.i >= q.items.length) { q.state = 'done'; q.note = ''; return { ok: true, view: await setQueue(q) }; }
+    const st = statsOf(await readLog());
+    if (st.hour >= HOUR_PAUSE) {
+      q.state = 'paused';
+      q.note = `최근 1시간에 댓글 ${st.hour}개를 남겼어요. 잠시 쉬었다가 [이어 하기]를 눌러 주세요.`;
+      return { ok: true, view: await setQueue(q) };
+    }
+    await openCurrent(q);
+    return { ok: true, view: viewOf(q) };
+  });
+}
+async function openCurrent(q) {
+  try { await chrome.tabs.get(q.tabId); }
+  catch (_) { const t = await chrome.tabs.create({ url: postUrl(q.items[q.i]), active: true }); q.tabId = t.id; await queueJob(t.id, q); await setQueue(q); if (q.buddy) maybeBuddy(q.items[q.i]); return; }
+  await queueJob(q.tabId, q);
+  await setQueue(q);
+  await chrome.tabs.update(q.tabId, { url: postUrl(q.items[q.i]), active: true });
+  if (q.buddy) maybeBuddy(q.items[q.i]);
+  if (q.items[q.i + 1]) prefetch(q.items[q.i + 1]);
+}
+function queueResume() {
+  return queued(async () => {
+    const q = await getQueue();
+    if (!q || q.state !== 'paused') return { ok: false, error: 'not-paused' };
+    q.state = 'run'; q.note = '';
+    await openCurrent(q);
+    return { ok: true, view: viewOf(q) };
+  });
+}
+function queueStop(why) {
+  return queued(async () => {
+    const q = await getQueue();
+    if (!q) return { ok: true, view: viewOf(null) };
+    q.state = 'stopped'; q.note = why || '';
+    const v = await setQueue(q);
+    await chrome.storage.session.remove('nbxQueue').catch(() => {});
+    return { ok: true, view: v };
+  });
+}
+// 연속 소통 탭에서 사용자가 등록을 누르면(댓글 도우미가 실제로 올라간 것을 확인한 뒤 알림) 잠시 뒤 다음 글로
+async function queueOnPosted(tabId, key) {
+  const q = await getQueue();
+  if (!q || q.state !== 'run' || q.tabId !== tabId) return;
+  const it = q.items[q.i];
+  if (!it || postKeyOf(it.blogId, it.logNo) !== key) return;
+  setTimeout(() => { queueAdvance('posted', tabId); }, QUEUE_NEXT_MS);
+}
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  const q = await getQueue();
+  if (q && q.tabId === tabId && (q.state === 'run' || q.state === 'paused')) queueStop('연속 소통 탭을 닫아 멈췄어요');
+});
+
+// ── 이웃 추가 창(네이버 BuddyAdd) ──
+async function buddyLog() {
+  const r = await chrome.storage.local.get('nbxBuddyLog').catch(() => ({}));
+  const L = (r && r.nbxBuddyLog) || {};
+  L.asked = L.asked || {};
+  if (L.day !== dayKey()) { L.day = dayKey(); L.n = 0; }
+  const cut = Date.now() - BUDDY_AGAIN_DAYS * 864e5;
+  Object.keys(L.asked).forEach((k) => { if (L.asked[k] < cut) delete L.asked[k]; });
+  return L;
+}
+async function buddyJobs() { const r = await chrome.storage.session.get('nbxBuddyJobs').catch(() => ({})); return (r && r.nbxBuddyJobs) || {}; }
+async function maybeBuddy(it) {
+  const L = await buddyLog();
+  if (L.asked[String(it.blogId).toLowerCase()]) return { ok: false, error: 'asked' };
+  return openBuddy(it, false);
+}
+async function openBuddy(it, manual) {
+  if (!ID_RE.test(it.blogId || '')) return { ok: false, error: 'bad-id' };
+  const L = await buddyLog();
+  if (L.n >= BUDDY_DAY_MAX) return { ok: false, error: 'day-limit', n: L.n };
+  const s = await getSettings();
+  const nick = cleanStr(it.nick, 30);
+  const msg = NBX.buddyMessage(s.cmt.buddyMsg, nick, (n) => NBXC.callable(n));
+  const win = await chrome.windows.create({ url: `https://blog.naver.com/BuddyAdd.naver?blogId=${encodeURIComponent(it.blogId)}`, type: 'popup', width: 520, height: 680, focused: true });
+  const tabId = win && win.tabs && win.tabs[0] && win.tabs[0].id;
+  const jobs = await buddyJobs();
+  Object.keys(jobs).forEach((k) => { if (Date.now() - jobs[k].at > 30 * 60e3) delete jobs[k]; });
+  if (tabId != null) jobs[tabId] = { blogId: it.blogId, nick, msg, type: s.cmt.buddyType, at: Date.now(), manual: !!manual };
+  await chrome.storage.session.set({ nbxBuddyJobs: jobs }).catch(() => {});
+  L.n++; L.asked[String(it.blogId).toLowerCase()] = Date.now();
+  await chrome.storage.local.set({ nbxBuddyLog: L }).catch(() => {});
+  return { ok: true, windowId: win.id, tabId, today: L.n };
+}
+async function buddyHello(sender) {
+  const tabId = sender.tab && sender.tab.id;
+  if (tabId == null || !/^https:\/\/(m\.)?blog\.naver\.com\//.test(sender.url || '')) return { ok: false };
+  const j = (await buddyJobs())[tabId];
+  if (!j || Date.now() - j.at > 30 * 60e3) return { ok: false };
+  return { ok: true, blogId: j.blogId, nick: j.nick, msg: j.msg, type: j.type };
+}
+async function buddyFilled(sender, msg) {
+  const tabId = sender.tab && sender.tab.id;
+  const jobs = await buddyJobs();
+  if (tabId == null || !jobs[tabId]) return { ok: false };
+  jobs[tabId].filled = !!msg.filled; jobs[tabId].picked = !!msg.picked;
+  await chrome.storage.session.set({ nbxBuddyJobs: jobs }).catch(() => {});
+  return { ok: true };
+}

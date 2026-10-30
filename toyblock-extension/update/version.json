@@ -1,12 +1,12 @@
 {
   "name": "토이블록 네이버 블로그 도우미",
-  "version": "1.9.1",
-  "released_at": "2026-10-30T04:07:56Z",
-  "notes": "· 하단 추천 배너를 온라인 설정으로 바꿀 수 있게 했어요(쿠팡 파트너스 링크나 인포크링크 페이지, 배너 문구)",
+  "version": "1.10.0",
+  "released_at": "2026-10-30T06:08:31Z",
+  "notes": "· 연속 소통(반자동): 이웃 소통 탭에서 ▶ 연속 소통 시작을 누르면 글이 차례로 열리고 댓글이 입력칸에 채워진 채 기다려요. 읽고 고쳐서 등록을 누르면 다음 글로 넘어가요(건너뛰기·멈추기, 1시간 20개에서 쉬어 가기)\n· 이웃 추가 도우미: 키워드 노출 글에서 이웃이 아닌 블로그는 이웃 추가 창을 열고 서로이웃을 골라 신청 메시지를 채워 둬요. 신청 버튼은 직접 눌러 마쳐요(하루 50개까지, 같은 블로그는 30일 안에 다시 열지 않음)\n· 설정 > 연속 소통 · 이웃 추가에서 서로이웃/이웃, 신청 메시지({닉네임})를 고칠 수 있어요",
   "download_url": "https://github.com/toy80318-sys/blog-assets/raw/main/toyblock-extension/dist/toyblock-naver-blog-helper.zip",
   "guide_url": "https://github.com/toy80318-sys/blog-assets/blob/main/toyblock-extension/README.md#업데이트-방법",
   "store_url": "",
   "files_url": "https://raw.githubusercontent.com/toy80318-sys/blog-assets/main/toyblock-extension/dist/toyblock-extension-files.zip",
-  "files_sha256": "ece18b92d41d8e839f9ead138dc6ad63cbc154ef469e14e15d8592df60b039ca",
-  "files_size": 143105
+  "files_sha256": "17f4e35d43015178e695862febcd9cca4a8b64f16100a7f58887edc370bbce4a",
+  "files_size": 153207
 }

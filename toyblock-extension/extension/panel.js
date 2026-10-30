@@ -6,7 +6,7 @@
   if (window.top !== window || (window.__nbxPanel && window.__nbxPanel === W)) return;
   if (!/(^|\.)blog\.naver\.com$/.test(location.hostname)) return;
   // 글쓰기 화면에서는 에디터를 가리지 않도록 패널을 띄우지 않습니다
-  if (/Redirect=Write|\/postwrite|PostWriteForm|PostUpdateForm|Redirect=Update/i.test(location.href)) return;
+  if (/Redirect=Write|\/postwrite|PostWriteForm|PostUpdateForm|Redirect=Update|BuddyAdd|BuddyDelete/i.test(location.href)) return; // 글쓰기·이웃 추가 창에는 패널을 띄우지 않음
   window.__nbxPanel = W || true;
   const API = 'https://m.blog.naver.com/api/blogs/';
   const DAY = 864e5;
@@ -17,7 +17,7 @@
 
   let settings = NBX.merge(null);
   const S = { open: false, tab: 'channel', blogId: null, channel: null, chLoading: false, chError: '', post: null, expo: null, expoRun: null, postExpo: null,
-    cmt: { mode: 'buddy', buddy: { items: [], page: 0, loading: false, error: '', more: true }, search: { q: '', items: [], loading: false, error: '', done: false }, marks: {}, stats: null, started: false, hidden: {}, showHidden: false } };
+    cmt: { mode: 'buddy', buddy: { items: [], page: 0, loading: false, error: '', more: true }, search: { q: '', items: [], loading: false, error: '', done: false }, marks: {}, stats: null, started: false, hidden: {}, showHidden: false, qv: null } };
 
   // ───────────── 유틸 ─────────────
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -627,13 +627,34 @@
       const mk = S.cmt.marks[keyOf(it)] || {};
       const st = why ? `<span class="cs">${WHY[why]}</span>` : mk.p ? '<span class="cs done">✓ 댓글</span>' : mk.o ? '<span class="cs">열어봄</span>' : '';
       const who = it.nick || it.blogName || it.blogId;
-      const tool = why === 'hidden' ? `<button class="hb" data-act="cmtUnhide" data-b="${esc(it.blogId)}" title="이 블로그를 다시 목록에 보이기">다시 보이기</button>`
-        : `<button class="hb" data-act="cmtHide" data-b="${esc(it.blogId)}" title="이 블로그 글은 앞으로 목록에서 빼기">숨기기</button>`;
+      const tool = (why === 'hidden' ? `<button class="hb" data-act="cmtUnhide" data-b="${esc(it.blogId)}" title="이 블로그를 다시 목록에 보이기">다시 보이기</button>`
+        : `<button class="hb" data-act="cmtHide" data-b="${esc(it.blogId)}" title="이 블로그 글은 앞으로 목록에서 빼기">숨기기</button>`)
+        + (src === 'search' && !why ? `<button class="hb nb" data-act="nbOpen" data-src="${src}" data-i="${i}" title="이웃 추가 창을 열고 신청 메시지를 채워 둡니다(신청은 직접)">＋이웃</button>` : '');
       return `<li class="ci ${mk.p || why ? 'dim' : ''}" data-act="cmtOpen" data-src="${src}" data-i="${i}" title="새 탭에서 글을 열고 댓글창으로 이동해 댓글을 복사합니다">
         <div class="ct">${esc(it.title || '(제목 없음)')}</div><div class="cm"><a class="home" href="https://blog.naver.com/${esc(it.blogId)}" target="_blank" rel="noopener" title="${esc(who)} 블로그로 가기">${esc(who)} ↗</a>${it.at ? `<span>· ${esc(ago(it.at))}</span>` : ''}${st}${tool}<b class="go">💬</b></div></li>`;
     }).join('')}</ol>` : '';
     if (skipped) h += `<button class="lnk skipnote" data-act="cmtShowHidden">${S.cmt.showHidden ? '뺀 글 다시 감추기' : `댓글을 달 수 없는 공식 블로그·숨긴 블로그 글 ${skipped}개를 뺐어요 · 보기`}</button>`;
     return h;
+  }
+  // 연속 소통(반자동): 목록의 글을 차례로 열어 댓글을 채워 두고, 사용자가 [등록]을 누르면 다음 글로
+  function queueTargets() {
+    const C = S.cmt;
+    const list = C.mode === 'search' ? C.search.items : C.buddy.items;
+    return list.filter((it) => !skipWhy(it) && !(C.marks[keyOf(it)] || {}).p);
+  }
+  function queueBox() {
+    const C = S.cmt, v = C.qv;
+    if (v && (v.state === 'run' || v.state === 'paused')) {
+      const head = v.state === 'run' ? `연속 소통 <b>${Math.min(v.i + 1, v.total)}/${v.total}</b> 진행 중` : '<b>잠시 쉬는 중</b>';
+      return `<div class="qbox on"><div>${head} · 등록 ${v.done} · 건너뜀 ${v.skipped}</div>${v.note ? `<div class="qn">${esc(v.note)}</div>` : ''}
+        <div class="qa">${v.state === 'paused' ? '<button class="btn primary" data-act="queueResume">이어 하기</button>' : ''}<button class="btn ghost" data-act="queueStop">멈추기</button></div></div>`;
+    }
+    const n = queueTargets().length;
+    if (!n) return '';
+    const other = C.mode === 'search';
+    return `<div class="qbox"><button class="btn primary" data-act="queueStart">▶ 연속 소통 시작 · ${n}개</button>
+      <div class="qn">글이 차례로 열리고 댓글이 입력칸에 채워진 채 기다려요. 읽고 [등록]을 누르면 다음 글로 넘어가요.</div>
+      ${other ? `<label class="qn qchk"><input type="checkbox" data-act="buddyAuto" ${settings.cmt.buddyAuto ? 'checked' : ''}> 이웃이 아닌 블로그는 이웃 추가 창도 열기(신청은 직접 확인)</label>` : ''}</div>`;
   }
   function cmtView() {
     const C = S.cmt;
@@ -643,6 +664,7 @@
     let h = `<div class="cstat"><span>오늘 댓글 <b>${st ? st.today : 0}</b>개${st && st.last ? ' · 마지막 ' + ago(st.last) : ''}</span><button class="lnk" data-act="settings">${esc(pl)} ⚙</button></div>`;
     if (currentLogNo()) h += `<button class="btn primary" data-act="cmtHere">💬 지금 보는 글에 댓글 만들기</button>`;
     h += `<div class="seg"><button class="${C.mode === 'buddy' ? 'on' : ''}" data-act="cmtMode" data-mode="buddy">이웃 새 글</button><button class="${C.mode === 'search' ? 'on' : ''}" data-act="cmtMode" data-mode="search">키워드 노출 글</button></div>`;
+    h += queueBox();
     if (C.mode === 'buddy') {
       const B = C.buddy;
       if (B.error && !B.items.length) {
@@ -781,6 +803,24 @@
     else if (act === 'cmtSearch') { const qi = root.querySelector('.q'); if (qi) S.cmt.search.q = qi.value; runSearch(); }
     else if (act === 'cmtOpen') openItem(t.dataset.src === 'search' ? S.cmt.search.items : S.cmt.buddy.items, Number(t.dataset.i), t.dataset.src === 'search' ? 'other' : 'buddy');
     else if (act === 'cmtHere') chrome.runtime.sendMessage({ type: 'nbx-cmt-here' }).catch(() => {});
+    else if (act === 'queueStart') {
+      const C = S.cmt;
+      const items = queueTargets().map((it) => ({ blogId: it.blogId, logNo: it.logNo, title: it.title, nick: it.nick }));
+      chrome.runtime.sendMessage({ type: 'nbx-cmt-queue-start', items, relation: C.mode === 'search' ? 'other' : 'buddy' })
+        .then((r) => { if (!r || !r.ok) flash('연속 소통을 시작하지 못했어요.'); }).catch(() => {});
+    }
+    else if (act === 'queueStop') chrome.runtime.sendMessage({ type: 'nbx-cmt-queue-stop' }).catch(() => {});
+    else if (act === 'queueResume') chrome.runtime.sendMessage({ type: 'nbx-cmt-queue-resume' }).catch(() => {});
+    else if (act === 'buddyAuto') {
+      const on = t.checked;
+      chrome.storage.sync.get('nbx').then((r) => { const x = NBX.merge(r.nbx); x.cmt.buddyAuto = on; return chrome.storage.sync.set({ nbx: x }); }).catch(() => {});
+      return;
+    }
+    else if (act === 'nbOpen') {
+      const it = (t.dataset.src === 'search' ? S.cmt.search.items : S.cmt.buddy.items)[Number(t.dataset.i)];
+      if (it) chrome.runtime.sendMessage({ type: 'nbx-cmt-nb-open', blogId: it.blogId, nick: it.nick })
+        .then((r) => flash(r && r.ok ? '이웃 추가 창을 열었어요. 메시지를 확인하고 신청을 눌러 주세요.' : r && r.error === 'day-limit' ? '오늘은 이웃 추가 창을 충분히 열었어요(하루 50개).' : '이웃 추가 창을 열지 못했어요.')).catch(() => {});
+    }
     else if (act === 'cmtHide') setHidden(t.dataset.b, true);
     else if (act === 'cmtUnhide') setHidden(t.dataset.b, false);
     else if (act === 'cmtShowHidden') { S.cmt.showHidden = !S.cmt.showHidden; render(); }
@@ -801,7 +841,11 @@
   });
   function openCmt() {
     render();
-    if (!S.cmt.started) { S.cmt.started = true; loadHidden().then(() => loadBuddy(false)); } else refreshMarks();
+    if (!S.cmt.started) {
+      S.cmt.started = true;
+      chrome.storage.local.get('nbxQueueView').then((r) => { const v = r && r.nbxQueueView; S.cmt.qv = v && Date.now() - (v.at || 0) < 6 * 3600e3 ? v : null; }).catch(() => {});
+      loadHidden().then(() => loadBuddy(false));
+    } else refreshMarks();
   }
   // 댓글을 달고 이 탭으로 돌아오면 표시를 새로 고칩니다
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.open && S.tab === 'cmt') refreshMarks(); });
@@ -852,6 +896,7 @@
   chrome.storage.onChanged.addListener((c, area) => {
     if (area === 'local' && c[POS_KEY] && !drag) { const v = c[POS_KEY].newValue; pos = v && Number.isFinite(v.x) ? { x: v.x, y: v.y } : null; applyPos(); }
     if (area === 'sync' && c.nbx) { settings = NBX.merge(c.nbx.newValue); render(); }
+    if (area === 'local' && c.nbxQueueView) { S.cmt.qv = c.nbxQueueView.newValue || null; if (S.tab === 'cmt') { render(); refreshMarks(); } }
   });
 
   start();
@@ -980,7 +1025,10 @@ details{margin-top:8px}summary{cursor:pointer;font-size:12px;color:#027a38;font-
 .go{font-size:12px}
 .cm .home{color:#4b5563;text-decoration:none;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cm .home:hover{color:#027a38;text-decoration:underline}
 .cm .hb{all:unset;cursor:pointer;font-size:10.5px;color:#9aa3ae;padding:0 4px;border-radius:5px;margin-left:auto}.cm .hb:hover{color:#b4234b;background:#fdecef}
-.cm .hb+.go{margin-left:4px}.skipnote{display:block;margin:2px 0 8px;font-size:11.5px}
+.cm .hb+.go{margin-left:4px}.cm .hb.nb{margin-left:0;color:#027a38}.cm .hb.nb:hover{background:#e9f8ef;color:#027a38}
+.qbox{margin:0 0 8px}.qbox.on{border:1.5px solid #03a94d;background:#f2fbf6;border-radius:10px;padding:8px 10px;font-size:12px}
+.qbox .qn{display:block;font-size:11px;color:#6b7280;margin-top:4px;line-height:1.45}.qbox .qa{display:flex;gap:6px;margin-top:6px}.qbox .qa .btn{margin:0;flex:1}
+.qchk{display:flex!important;gap:5px;align-items:flex-start;cursor:pointer}.qchk input{margin:1px 0 0}.skipnote{display:block;margin:2px 0 8px;font-size:11.5px}
 .flash{position:absolute;left:0;top:44px;width:300px;background:#333;color:#fff;border-radius:10px;padding:9px 12px;font-size:12px;box-shadow:0 6px 16px rgba(0,0,0,.2)}
 `;
   }

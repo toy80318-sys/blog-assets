@@ -101,6 +101,16 @@
   <label class="opt"><input type="checkbox" id="cmtPrefetch"> 목록의 다음 글 댓글을 미리 만들어 두기 (기다림이 줄지만 AI 사용량이 늘어요)</label>
   <label class="opt"><input type="checkbox" id="cmtLinkButtons"> 네이버 검색·이웃새글 화면의 글 옆에 💬 댓글 버튼 표시</label>
 
+  <h2 id="queue">연속 소통 · 이웃 추가</h2>
+  <p class="desc">이웃 소통 탭의 <b>▶ 연속 소통 시작</b>을 누르면 목록의 글이 한 탭에서 차례로 열리고, 댓글이 입력칸에 채워진 채 기다립니다. 읽고 고친 뒤 <b>등록</b>을 누르면 잠시 뒤 다음 글로 넘어갑니다. 최근 1시간 댓글이 20개가 되면 잠시 멈춥니다. 키워드 노출 글처럼 이웃이 아닌 블로그는 네이버 <b>이웃 추가 창</b>을 열고 신청 메시지를 채워 둡니다. 신청 버튼은 직접 눌러 마쳐 주세요.</p>
+  <label class="opt"><input type="checkbox" id="buddyAuto"> 연속 소통에서 이웃이 아닌 블로그는 이웃 추가 창도 열기 (하루 50개까지, 같은 블로그는 30일 동안 다시 열지 않음)</label>
+  <div class="opt" style="flex-wrap:wrap"><b style="font-size:13px">신청 방식</b>
+    <label><input type="radio" name="buddyType" value="mutual"> 서로이웃 신청</label>
+    <label><input type="radio" name="buddyType" value="follow"> 이웃으로만 추가</label></div>
+  <div class="opt" style="align-items:flex-start;flex-direction:column;gap:4px"><span style="font-size:13px">서로이웃 신청 메시지 (200자까지 · <code>{닉네임}</code>은 ○○님으로 바뀝니다)</span>
+    <textarea id="buddyMsg" rows="2" maxlength="200" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #cfd4da;border-radius:7px;resize:vertical"></textarea>
+    <span class="fdesc" id="buddyPreview"></span></div>
+
   <h2>화면 표시</h2>
   <label class="opt"><input type="checkbox" id="showBar"> 글쓰기 화면에 단축키 버튼 표시 (단축키가 듣지 않을 때 클릭으로 실행)</label>
   <div class="opt" style="padding-left:22px;flex-wrap:wrap">
