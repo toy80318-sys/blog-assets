@@ -125,6 +125,36 @@
     return { count: recent.length, perWeek: recent.length / 4, byWd, topWd, topHour, last, avgGap, activeDays, offSearch: posts.slice(0, 30).filter((p) => !p.searchYn).length };
   }
 
+  // ───────────── 누락·주의 글 처방(지울지·고칠지, 고친다면 무엇을) ─────────────
+  // 쓰는 정보: 노출 결과(순위), 글 발행일·공감·댓글(채널 분석 글 목록), 제목, 최근 글끼리 제목 겹침
+  const HOT_WORDS = /(충격|폭로|경악|소름|실화|대박|논란|발칵|오열|난리|분노|긴급|속보|결국|헉|ㄷㄷ|열애|이혼|사망)/;
+  const tokensOf = (t) => new Set(String(t || '').replace(/[^가-힣A-Za-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length >= 2));
+  function similarTo(r, all) {
+    const a = tokensOf(r.title);
+    if (a.size < 2) return null;
+    for (const o of all) {
+      if (o.logNo === r.logNo) continue;
+      const b = tokensOf(o.title);
+      let same = 0;
+      a.forEach((w) => { if (b.has(w)) same++; });
+      if (same >= 2 && same / Math.min(a.size, b.size) >= 0.6) return o;
+    }
+    return null;
+  }
+  function advise(r, all) {
+    const p = S.channel && S.channel.posts ? S.channel.posts.find((x) => x.logNo === String(r.logNo)) : null;
+    const age = p && p.addDate ? (Date.now() - p.addDate) / DAY : null;
+    const miss = r.status === 'miss';
+    const hot = (String(r.title).match(HOT_WORDS) || [])[1];
+    const twin = similarTo(r, all);
+    if (miss && age != null && age < 2) return { tag: '기다리기', text: '발행한 지 이틀이 안 됐어요. 검색 반영 전일 수 있으니 그대로 두고 2~3일 뒤 다시 확인해요.' };
+    if (hot) return { tag: '제목 수정', text: `'${hot}' 같은 자극적인 표현이 노출을 막을 수 있어요. 그 표현을 빼고 핵심어 + 알려 주는 내용으로 제목을 바꾸고, 본문 첫 문단도 사실 위주로 다듬어요.` };
+    if (twin) return { tag: '합치기', text: `제목이 비슷한 글('${String(twin.title).slice(0, 18)}…')과 같은 검색어를 두고 겹쳐요. 내용을 한 글로 합치고 남는 글은 비공개로 돌려요.` };
+    if (miss && age != null && age > 30) return { tag: '비공개 → 새 글', text: '오래 누락된 글은 고쳐도 다시 잡히기 어려운 편이에요. 비공개로 돌려 두고, 같은 주제는 새 제목·새 관점으로 새 글을 써요.' };
+    if (miss) return { tag: '수정', text: `제목 앞쪽에 핵심 검색어를 두고 첫 문단에서 그 검색어로 답을 먼저 정리해요. 본문을 직접 찍은 사진·경험으로 보강한 뒤 3~4일 뒤 다시 확인하고, 그래도 누락이면 비공개 후 새 글로 써요.` };
+    return { tag: '보강', text: `검색에 ${r.rank}위로 잡혀 있어요. 글은 그대로 두고 고쳐서 순위를 올려요: 제목의 핵심어를 앞으로, 소제목에 관련 검색어 1~2개, 본문에 정리 표·최신 정보를 더해요.` };
+  }
+
   // ───────────── 블로그 점수 ─────────────
   // 토이블록 자체 기준(100점): 검색 노출 40 · 발행 꾸준함 25 · 최근 발행 10 · 독자 반응 15 · 방문자 10
   const GRADES = [[90, '최상'], [75, '좋음'], [55, '보통'], [35, '관리 필요'], [0, '점검 필요']];
@@ -455,15 +485,17 @@
       <div class="bar"><i style="width:${sm.score || 0}%"></i></div>
       <div class="kv">최근 글 ${sm.judged}개 중 <b class="acc">${sm.visible}개</b>가 검색에 잘 보여요</div>
       <div class="stack">${seg}</div><div class="legend">${legend}</div>
-      ${sm.c.miss || sm.c.warn ? `<div class="tipline"><b>${[sm.c.miss && `누락 ${sm.c.miss}편`, sm.c.warn && `주의 ${sm.c.warn}편`].filter(Boolean).join(' · ')}</b>이 있어요. 아래 "글별 결과 보기"에서 어떤 글인지 확인하고, 원인별로 고치는 방법을 따라 해 보세요.</div>
+      ${sm.c.miss || sm.c.warn ? `<div class="tipline"><b>${[sm.c.miss && `누락 ${sm.c.miss}편`, sm.c.warn && `주의 ${sm.c.warn}편`].filter(Boolean).join(' · ')}</b>이 있어요. 아래 "글별 결과 보기"에 글마다 지울지·고칠지와 고칠 방향을 적어 두었어요. 삭제 대신 고치거나 비공개로 돌려 두는 쪽이 블로그 전체에 안전해요. 원인별로 고치는 방법을 따라 해 보세요.</div>
       <button class="btn primary" data-act="tips" data-hash="missing">누락·주의 글 살리는 법 보기 →</button>` : ''}
       ${sm.c.off ? `<div class="note warnc">검색 비허용으로 설정된 글 ${sm.c.off}편은 지수에서 뺐습니다.</div>` : ''}
       ${sm.c.err ? `<div class="note">확인하지 못한 글 ${sm.c.err}편은 다시 확인하면 채워집니다.</div>` : ''}
-      <details><summary>글별 결과 보기</summary><ol class="list xs">`;
+      <details class="byp"><summary><span class="sh-o">📋 글별 결과 보기 <small>${ex.results.length}편</small></span><span class="sh-c">글별 결과 접기</span><i class="car">▾</i></summary><ol class="list xs">`;
     ex.results.forEach((r) => {
       const st = STATUS[r.status] || STATUS.err;
       const rk = r.rank ? `${r.rank}위` : st.label;
-      h += `<li><i class="dot" style="background:${st.color}"></i><a href="https://blog.naver.com/${esc(S.blogId)}/${esc(r.logNo)}" target="_top" title="${esc(r.title)}">${esc(r.title)}</a><span class="num">${esc(rk)}</span></li>`;
+      const ad = r.status === 'miss' || r.status === 'warn' ? advise(r, ex.results) : null;
+      h += `<li class="${ad ? 'ad' : ''}"><div class="row"><i class="dot" style="background:${st.color}"></i><a href="https://blog.naver.com/${esc(S.blogId)}/${esc(r.logNo)}" target="_top" title="${esc(r.title)}">${esc(r.title)}</a><span class="num">${esc(rk)}</span></div>`
+        + (ad ? `<div class="adv"><b class="t-${esc(ad.tag === '보강' || ad.tag === '수정' || ad.tag === '제목 수정' ? 'fix' : ad.tag === '기다리기' ? 'wait' : 'hide')}">${esc(ad.tag)}</b>${esc(ad.text)}</div>` : '') + '</li>';
     });
     h += `</ol></details>
       <div class="note">기준: 제목 검색 시 블로그 탭 1~3위 최적 · 4~10위 활성 · 11위 이하 주의 · 결과에 없음 누락</div>
@@ -1045,9 +1077,24 @@ button{font:inherit;cursor:pointer}
 .legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
 .note{font-size:11.5px;color:#7a8492;margin-top:6px;line-height:1.5}.warnc{color:#b26a00}
 details{margin-top:8px}summary{cursor:pointer;font-size:12px;color:#027a38;font-weight:700}
+details.byp{margin-top:10px}
+details.byp>summary{list-style:none;display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:10px 12px;border:1.5px solid #03a94d;border-radius:10px;background:#fff;color:#027a38;font-size:14px;font-weight:800;user-select:none}
+details.byp>summary::-webkit-details-marker{display:none}
+details.byp>summary:hover{background:#f2fbf6}
+details.byp>summary small{font-size:12px;font-weight:700;color:#5b8f6f;margin-left:2px}
+details.byp>summary .car{font-style:normal;font-size:13px;transition:transform .15s}
+details.byp .sh-c{display:none}
+details.byp[open]>summary{background:#e9f8ef;margin-bottom:6px}
+details.byp[open]>summary .sh-o{display:none}details.byp[open]>summary .sh-c{display:inline}
+details.byp[open]>summary .car{transform:rotate(180deg)}
 .list{list-style:none;margin:4px 0 0;padding:0}
 .list li{display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #f0f2f5;font-size:12.5px}
 .list li:last-child{border:0}
+.list li .row{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+.list li.ad{flex-direction:column;align-items:stretch;gap:3px}
+.list .adv{font-size:11.5px;line-height:1.5;color:#3d4550;background:#f7f8fa;border-radius:7px;padding:5px 7px;margin-left:13px;word-break:keep-all;overflow-wrap:anywhere}
+.list .adv b{display:inline-block;margin-right:5px;font-size:10.5px;font-weight:800;border-radius:5px;padding:0 5px;line-height:16px}
+.adv .t-fix{background:#e9f8ef;color:#027a38}.adv .t-wait{background:#eaf1ff;color:#1d4ed8}.adv .t-hide{background:#fff3e0;color:#b45309}
 .list a{flex:1;min-width:0;color:#1f2328;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .list a:hover{color:#027a38;text-decoration:underline}
 .list .no{width:14px;color:#03a94d;font-weight:800}.list .num{color:#8a94a3;font-size:11.5px;white-space:nowrap}

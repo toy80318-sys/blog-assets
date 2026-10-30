@@ -1,12 +1,12 @@
 {
   "name": "토이블록 네이버 블로그 도우미",
-  "version": "1.11.0",
-  "released_at": "2026-10-30T08:11:16Z",
-  "notes": "· 한 번에 소통: 댓글 카드의 [✓ 등록 + 서로이웃 신청]을 누르면 입력칸의 댓글이 등록되고, 그 블로그에 서로이웃 신청(메시지 포함)까지 마쳐요. 연속 소통에서는 신청을 마치면 다음 글로 넘어가요\n· 블로그 화면의 [이웃추가] 버튼을 누르면 서로이웃을 고르고 신청 메시지를 채워 바로 신청해요(설정에서 끄면 채워 두기만)\n· 추천 검색: 키워드 노출 글은 블로그 점수 60점 이상이거나 검색 상위 10위 안의 글만 추천해요. 글마다 [상위 n위]·[점수] 표시, [전체 보기]로 모두 볼 수 있어요",
+  "version": "1.11.1",
+  "released_at": "2026-10-30T08:33:51Z",
+  "notes": "· 채널 분석의 [글별 결과 보기]를 큰 버튼으로 바꿨어요(편수 표시, 펼치면 [접기])\n· 누락·주의 글마다 지울지·고칠지와 고칠 방향을 짧게 알려 줘요(기다리기 · 제목 수정 · 합치기 · 보강 · 수정 · 비공개 후 새 글)",
   "download_url": "https://github.com/toy80318-sys/blog-assets/raw/main/toyblock-extension/dist/toyblock-naver-blog-helper.zip",
   "guide_url": "https://github.com/toy80318-sys/blog-assets/blob/main/toyblock-extension/README.md#업데이트-방법",
   "store_url": "",
   "files_url": "https://raw.githubusercontent.com/toy80318-sys/blog-assets/main/toyblock-extension/dist/toyblock-extension-files.zip",
-  "files_sha256": "83b6e8c05b1cc1ed4f543af2fa2fc20a57507c7eb7f76ab4c382531679470a41",
-  "files_size": 158060
+  "files_sha256": "2efda1644b7e45aea46e5fb9bc9a639f125b729936ad8af34b79b07d8fd15309",
+  "files_size": 161616
 }
