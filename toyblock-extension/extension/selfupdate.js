@@ -126,16 +126,48 @@
     try { await dir.removeEntry(LINK); } catch (_) {}
     return seen === token ? { ok: true } : { ok: false, why: 'copy' };
   }
-  // 사용자가 상위 폴더(압축 푼 폴더)를 골랐으면 그 안의 nbx 폴더를 씁니다
-  async function resolveDir(dir) {
-    try { await dir.getFileHandle('manifest.json'); return dir; } catch (_) {}
-    for (const name of ['nbx', 'extension']) { try { const d = await dir.getDirectoryHandle(name); await d.getFileHandle('manifest.json'); return d; } catch (_) {} }
-    return dir;
+  // 고른 폴더 안을 뒤져(최대 4단계 · 폴더 600개) 토이블록 폴더를 모두 찾고, 그중 지금 켜져 있는 것을 고릅니다.
+  // 그래서 압축 푼 폴더·여러 버전을 모아 둔 폴더·상위 폴더를 골라도 진짜 설치 폴더를 찾아 줍니다.
+  const SKIP_DIR = /^(\.|\$|node_modules$|__MACOSX$|AppData$|Library$)/;
+  async function manifestOf(dir) { try { return JSON.parse(new TextDecoder().decode(await fileBytes(dir, 'manifest.json'))); } catch (_) { return null; } }
+  // 넓게 훑되, 토이블록 폴더를 찾을 때마다 바로 '지금 켜져 있는 것인지' 확인해 맞으면 거기서 멈춥니다
+  async function locate(root) {
+    const NAME = chrome.runtime.getManifest().name;
+    const found = [];
+    let other = false, seen = 0;
+    const queue = [{ dir: root, path: root.name, d: 0 }];
+    while (queue.length && seen < 600 && found.length < 20) {
+      const { dir, path, d } = queue.shift();
+      seen++;
+      const m = await manifestOf(dir);
+      if (m && m.name === NAME) {
+        if ((await isThisExtension(dir)).ok) return { ok: true, dir, path };
+        found.push({ path, version: String(m.version || '') });
+        continue;
+      }
+      if (m) other = true;
+      if (d >= 4 || !dir.entries) continue;
+      const kids = [];
+      try { for await (const [name, h] of dir.entries()) if (h.kind === 'directory' && !SKIP_DIR.test(name)) kids.push([name, h]); } catch (_) {}
+      // nbx · extension 폴더를 먼저 살펴봅니다
+      kids.sort((a, b) => (/^(nbx|extension)$/.test(b[0]) ? 1 : 0) - (/^(nbx|extension)$/.test(a[0]) ? 1 : 0));
+      kids.forEach(([name, h]) => queue.push({ dir: h, path: path + '/' + name, d: d + 1 }));
+    }
+    return { ok: false, why: found.length ? 'copy' : other ? 'other' : 'nomanifest', found };
+  }
+  function folderError(who) {
+    const cur = chrome.runtime.getManifest().version;
+    const vs = who.found && who.found.length ? [...new Set(who.found.map((c) => 'v' + c.version))].join(', ') : '';
+    const e = new Error(who.why === 'nomanifest' ? '고른 폴더 안에서 토이블록 파일(manifest.json)을 찾지 못했어요. 토이블록을 설치한 폴더를 골라 주세요'
+      : who.why === 'other' ? '다른 확장 프로그램 폴더예요. 토이블록을 설치한 폴더를 골라 주세요'
+      : `고른 폴더의 토이블록${vs ? '(' + vs + ')' : ''}은 지금 켜져 있는 토이블록(v${cur})과 다른 폴더(복사본)예요. 아래 [설치 위치 확인]으로 진짜 설치 폴더를 찾아 골라 주세요`);
+    e.code = 'folder';
+    return e;
   }
 
   // ── 업데이트 실행
   // step(name, state, detail): 화면에 진행 상황을 그립니다
-  async function run({ interactive = true, force = false, step = () => {} } = {}) {
+  async function run({ interactive = true, force = false, auto = false, step = () => {} } = {}) {
     const current = chrome.runtime.getManifest().version;
     step('check', 'run');
     const L = await latest();
@@ -151,19 +183,25 @@
     }
     if (!dir) {
       if (!interactive) return { status: 'need-pick', latest: L };
-      try { dir = await api.pick(); } catch (e) { if (e && e.name === 'AbortError') return { status: 'cancel', latest: L }; throw new Error('폴더를 열지 못했어요 — ' + ((e && e.message) || e)); }
-      dir = await resolveDir(dir);
-      if (!(await permission(dir, true))) throw new Error('폴더 수정을 허용해야 업데이트할 수 있어요');
+      let picked;
+      try { picked = await api.pick(); } catch (e) { if (e && e.name === 'AbortError') return { status: 'cancel', latest: L }; throw new Error('폴더를 열지 못했어요 — ' + ((e && e.message) || e)); }
+      if (!(await permission(picked, true))) throw new Error('폴더 수정을 허용해야 업데이트할 수 있어요');
+      step('folder', 'run', '설치 폴더 찾는 중…');
+      const loc = await locate(picked);
+      if (!loc.ok) throw folderError(loc);
+      dir = loc.dir;
+      await api.saveHandle(dir).catch(() => {});
+      await chrome.storage.local.set({ nbxFolderLink: { linked: true, name: dir.name, at: Date.now() } }).catch(() => {});
+      step('folder', 'ok', loc.path);
+    } else {
+      const who = await isThisExtension(dir);
+      if (!who.ok) {
+        await api.forgetHandle().catch(() => {});
+        await chrome.storage.local.remove('nbxFolderLink').catch(() => {});
+        throw folderError(who);
+      }
+      step('folder', 'ok', dir.name);
     }
-    const who = await isThisExtension(dir);
-    if (!who.ok) {
-      await api.forgetHandle().catch(() => {});
-      throw new Error(who.why === 'nomanifest' ? '고른 폴더에 토이블록 파일(manifest.json)이 없어요. 압축을 푼 폴더 안의 nbx 폴더를 골라 주세요'
-        : who.why === 'other' ? '다른 확장 프로그램 폴더예요. 토이블록을 설치한 nbx 폴더를 골라 주세요'
-        : '지금 켜져 있는 토이블록과 다른 폴더예요(복사본일 수 있어요). chrome://extensions의 토이블록 세부정보에서 "원본" 위치를 확인해 그 폴더를 골라 주세요');
-    }
-    await api.saveHandle(dir).catch(() => {});
-    step('folder', 'ok', dir.name);
 
     step('download', 'run');
     const r = await api.fetch(L.filesUrl + '?t=' + Date.now(), { cache: 'no-store', credentials: 'omit' });
@@ -198,7 +236,7 @@
     step('write', 'ok', `${backup.length}개 바뀜`);
 
     step('reload', 'run');
-    await chrome.storage.local.set({ nbxSelfUpdate: { from: current, to: L.version, at: Date.now() } }).catch(() => {});
+    await chrome.storage.local.set({ nbxSelfUpdate: { from: current, to: L.version, at: Date.now(), auto: !!auto } }).catch(() => {});
     setTimeout(() => api.reload(), 400);
     return { status: 'applied', latest: L, changed: backup.length };
   }
@@ -216,5 +254,5 @@
     return { linked: true, granted, name: h.name };
   }
 
-  g.NBXSelf = { run, latest, linked, unzip, cmpVer, api };
+  g.NBXSelf = { run, latest, linked, unzip, cmpVer, api, locate };
 })(globalThis);

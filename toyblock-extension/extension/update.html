@@ -25,6 +25,9 @@
   .msg.ok { color: #027a38; font-weight: 700; } .msg.err { color: #c62828; }
   .done { text-align: center; padding: 10px 0 4px; }
   .done b { display: block; font-size: 20px; color: #027a38; margin-bottom: 6px; }
+  .where { display: none; margin: 12px 0 0; font-size: 13px; color: #3d4550; background: #fff8ec; border-left: 4px solid #f59e0b; border-radius: 6px; padding: 10px 12px; }
+  .where ol { margin: 6px 0 8px; padding-left: 20px; } .where li { margin: 2px 0; }
+  .where .sub { border: 1px solid #03a94d; background: #fff; color: #027a38; border-radius: 8px; padding: 6px 12px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; margin: 2px 4px 0 0; }
   .links { margin-top: 18px; font-size: 12.5px; color: var(--sub); display: flex; gap: 14px; flex-wrap: wrap; }
   .links a, .links button { color: #027a38; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; text-decoration: underline; }
 </style>
@@ -37,7 +40,16 @@
   <div id="doneBox" class="done" style="display:none"><b id="doneTitle"></b><span>열려 있는 블로그 탭에도 새로고침 없이 반영됐어요.</span></div>
   <div class="notes" id="notes"></div>
   <button class="go" id="go" disabled>지금 업데이트</button>
-  <p class="first" id="first">처음 한 번만 <b>토이블록을 설치한 폴더</b>를 골라 주세요(설치할 때 압축을 푼 폴더 안의 <b>nbx</b> 폴더). 크롬이 "파일 수정 허용"을 물으면 <b>허용</b>을 눌러 주세요. 다음부터는 이 버튼만 누르면 바로 업데이트돼요.</p>
+  <p class="first" id="first">처음 한 번만 <b>토이블록 폴더</b>를 골라 주세요. 정확한 폴더를 몰라도 <b>압축을 푼 폴더</b>나 여러 버전을 모아 둔 폴더를 고르면, 그 안에서 지금 켜져 있는 토이블록 폴더를 찾아 써요. 크롬이 "파일 수정 허용"을 물으면 <b>허용</b>(고를 수 있으면 <b>항상 허용</b>)을 눌러 주세요. 그다음부터는 새 버전이 나오면 저절로 바뀌어요.</p>
+  <div class="where" id="where">
+    <b>지금 켜져 있는 토이블록 폴더 찾기</b>
+    <ol>
+      <li>아래 <b>설치 위치 확인</b>을 누르면 크롬의 토이블록 세부정보가 열려요.</li>
+      <li>아래쪽에 적힌 <b>설치 폴더 경로</b>(압축해제된 확장 프로그램 · …에서 로드됨)를 확인해요.</li>
+      <li>이 화면의 <b>설치 폴더 다시 고르기</b>를 누르고, 폴더 선택 창 위쪽 주소 칸에 그 경로를 붙여 넣어 그 폴더(또는 그 위 폴더)를 골라요.</li>
+    </ol>
+    <button type="button" class="sub" id="openExt">설치 위치 확인</button> <button type="button" class="sub" id="repick">설치 폴더 다시 고르기</button>
+  </div>
   <ol class="steps" id="steps">
     <li data-s="check"><i>·</i>최신 버전 확인<small></small></li>
     <li data-s="folder"><i>·</i>설치 폴더 확인<small></small></li>

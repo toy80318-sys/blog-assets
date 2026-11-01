@@ -11,12 +11,15 @@ const step = (name, state, detail) => {
 };
 const msg = (t, cls) => { $('#msg').textContent = t; $('#msg').className = 'msg ' + (cls || ''); };
 let store = false, latestInfo = null, busy = false;
+const AUTO = /[?&]auto=1/.test(location.search); // 새 버전이 나와 확장이 스스로 연 화면(사용자가 누르지 않음)
+const closeSelf = () => { try { chrome.tabs.getCurrent((t) => { if (t) chrome.tabs.remove(t.id); }); } catch (_) {} };
 
-async function go(interactive) {
+async function go(interactive, auto = false) {
   if (busy) return;
   busy = true;
   $('#go').disabled = true;
   msg('');
+  $('#where').style.display = 'none';
   document.querySelectorAll('li[data-s]').forEach((li) => { li.className = ''; li.querySelector('i').textContent = '·'; li.querySelector('small').textContent = ''; });
   try {
     if (store) {
@@ -31,15 +34,18 @@ async function go(interactive) {
       else msg(`v${cur} — 최신 버전이에요`, 'ok');
       return;
     }
-    const r = await NBXSelf.run({ interactive, step });
+    const r = await NBXSelf.run({ interactive, step, auto });
     if (r.status === 'latest') msg(`v${cur} — 최신 버전이에요`, 'ok');
     else if (r.status === 'need-pick' || r.status === 'need-click') { msg('아래 버튼을 한 번 눌러 주세요.', ''); $('#first').style.display = r.status === 'need-pick' ? 'block' : 'none'; }
     else if (r.status === 'cancel') msg('폴더 고르기를 취소했어요.', '');
-    else if (r.status === 'applied') { step('reload', 'ok', '다시 불러오는 중'); msg(`v${r.latest.version}으로 바꿨어요. 잠시 뒤 이 화면이 새로 열려요.`, 'ok'); }
+    else if (r.status === 'applied') { step('reload', 'ok', '다시 불러오는 중'); msg(`v${r.latest.version}으로 바꿨어요. 잠시 뒤 이 화면이 새로 열려요. 다음 버전부터는 새 버전이 나오면 저절로 바뀌어요(크롬을 다시 켠 뒤 허용을 다시 물으면 한 번만 눌러 주세요).`, 'ok'); }
+    if (auto && r.status !== 'applied') closeSelf();
   } catch (e) {
     const li = document.querySelector('li.run');
     if (li) step(li.getAttribute('data-s'), 'err');
     msg(String((e && e.message) || e), 'err');
+    if (e && e.code === 'folder') { $('#where').style.display = 'block'; $('#first').style.display = 'none'; }
+    if (auto) { chrome.storage.local.set({ nbxAutoTried: { ver: latestInfo && latestInfo.version, at: Date.now(), error: String((e && e.message) || e).slice(0, 200) } }).catch(() => {}); closeSelf(); }
   } finally {
     busy = false;
     $('#go').disabled = false;
@@ -62,6 +68,7 @@ async function init() {
     return;
   }
   try { store = (await chrome.management.getSelf()).installType === 'normal'; } catch (_) {}
+  if (AUTO && store) { closeSelf(); return; }
   if (store) $('#relink').style.display = 'none';
   try {
     latestInfo = await NBXSelf.latest();
@@ -76,10 +83,16 @@ async function init() {
     const l = await NBXSelf.linked();
     $('#first').style.display = l.linked ? 'none' : 'block';
     if (l.linked) $('#relink').textContent = `설치 폴더 다시 고르기 (지금: ${l.name})`;
+    const ready = l.linked && l.granted && latestInfo && NBXSelf.cmpVer(latestInfo.version, cur) > 0;
+    // 새 버전이 나와 저절로 열린 화면: 폴더 허용이 살아 있으면 바로 바꾸고, 아니면 조용히 닫습니다(아이콘에 N 표시는 남음)
+    if (AUTO) { if (ready) go(false, true); else closeSelf(); return; }
     // 팝업의 '지금 업데이트'로 열렸고, 폴더 허용이 살아 있으면 누르지 않아도 바로 진행합니다
-    if (/[?&]go=1/.test(location.search) && l.linked && l.granted && latestInfo && NBXSelf.cmpVer(latestInfo.version, cur) > 0) go(false);
+    if (/[?&]go=1/.test(location.search) && ready) go(false);
   } else if (/[?&]go=1/.test(location.search)) go(false);
 }
 $('#go').addEventListener('click', () => go(true));
-$('#relink').addEventListener('click', async () => { await NBXSelf.api.forgetHandle().catch(() => {}); $('#first').style.display = 'block'; $('#relink').textContent = '설치 폴더 다시 고르기'; go(true); });
+const relink = async () => { await NBXSelf.api.forgetHandle().catch(() => {}); await chrome.storage.local.remove('nbxFolderLink').catch(() => {}); $('#first').style.display = 'block'; $('#relink').textContent = '설치 폴더 다시 고르기'; go(true); };
+$('#relink').addEventListener('click', relink);
+$('#repick').addEventListener('click', relink);
+$('#openExt').addEventListener('click', () => { chrome.tabs.create({ url: 'chrome://extensions/?id=' + chrome.runtime.id }).catch(() => {}); });
 init();

@@ -75,7 +75,22 @@ async function checkUpdate() {
     if (info.available) await chrome.action.setBadgeBackgroundColor({ color: '#e8547a' });
     await chrome.action.setTitle({ title: info.available ? `토이블록 — 새 버전 ${info.latest} 있음` : '토이블록 네이버 블로그 도우미' });
   } catch (_) {}
+  autoFolderUpdate(info).catch(() => {});
   return info;
+}
+// 폴더 설치본 자동 업데이트: 설치 폴더를 한 번 연결해 두었으면, 새 버전이 나왔을 때 업데이트 화면을 뒤쪽 탭으로 열어
+// 폴더 허용이 살아 있는 동안은 누르지 않아도 바로 바꿉니다(허용이 없으면 그 화면은 조용히 닫히고 아이콘의 N만 남음).
+// 글쓰기 화면이 열려 있으면 미루고, 같은 버전은 12시간에 한 번만 시도합니다.
+async function autoFolderUpdate(info) {
+  if (!info.available || info.installType !== 'development') return;
+  const r = await chrome.storage.local.get(['nbxFolderLink', 'nbxAutoTried']).catch(() => ({}));
+  if (!r.nbxFolderLink || !r.nbxFolderLink.linked) return;
+  const t = r.nbxAutoTried;
+  if (t && t.ver === info.latest && Date.now() - (t.at || 0) < 12 * 3600e3) return;
+  const tabs = await chrome.tabs.query({ url: ['https://blog.naver.com/*', 'https://*.blog.naver.com/*'] }).catch(() => []);
+  if (tabs.some((x) => /Redirect=Write|PostWriteForm|postwrite|PostUpdateForm|Redirect=Update/i.test(x.url || ''))) return;
+  await chrome.storage.local.set({ nbxAutoTried: { ver: info.latest, at: Date.now() } }).catch(() => {});
+  await chrome.tabs.create({ url: chrome.runtime.getURL('update.html?go=1&auto=1'), active: false }).catch(() => {});
 }
 // 웹스토어에 새 버전을 바로 확인해 달라고 요청합니다(너무 자주 부르면 크롬이 잠시 미룹니다: throttled)
 async function askStore() {
@@ -127,8 +142,8 @@ async function handleInstalled(d) {
     const su = r && r.nbxSelfUpdate;
     if (su && Date.now() - (su.at || 0) < 5 * 60e3 && su.to === to) {
       await chrome.storage.local.remove('nbxSelfUpdate').catch(() => {});
-      await chrome.storage.local.set({ nbxJustUpdated: { from: su.from, to, at: Date.now() } }).catch(() => {});
-      chrome.tabs.create({ url: chrome.runtime.getURL('update.html#done') }).catch(() => {});
+      await chrome.storage.local.set({ nbxJustUpdated: { from: su.from, to, at: Date.now(), auto: !!su.auto } }).catch(() => {});
+      if (!su.auto) chrome.tabs.create({ url: chrome.runtime.getURL('update.html#done') }).catch(() => {}); // 저절로 바꾼 경우는 화면을 띄우지 않음(팝업에 표시)
     } else if (d.reason === 'install') {
       // 처음 설치: 시작 안내(툴바 고정 · AI 키 연결 · 블로그 열기)를 엽니다
       chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html') }).catch(() => {});
