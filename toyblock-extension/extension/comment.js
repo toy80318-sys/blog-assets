@@ -179,7 +179,9 @@
         b.addEventListener('click', (e) => {
           e.preventDefault(); e.stopPropagation();
           b.classList.add('done');
-          send({ type: 'nbx-cmt-open', blogId: p.blogId, logNo: p.logNo, title: text.slice(0, 150), nick: nickNear(a, p.blogId), relation });
+          send({ type: 'nbx-cmt-open', blogId: p.blogId, logNo: p.logNo, title: text.slice(0, 150), nick: nickNear(a, p.blogId), relation }).then((r) => {
+            if (r && r.error === 'deleted') { b.classList.remove('done'); b.textContent = '삭제된 글'; b.disabled = true; b.title = '삭제되었거나 볼 수 없는 글이라 열지 않았어요'; }
+          });
         }, true);
         ['mousedown', 'mouseup', 'pointerdown', 'pointerup'].forEach((ev) => b.addEventListener(ev, (e) => e.stopPropagation(), true));
         // 제목이 말줄임(줄 수 제한) 상자 안에 있으면 상자 바로 뒤에 붙여 가려지지 않게 합니다
@@ -416,7 +418,7 @@
       btn('qskip').hidden = !running; btn('qstop').hidden = !(running || v.state === 'paused');
       btn('qresume').hidden = v.state !== 'paused';
       const t = qb.querySelector('.qt'), n = qb.querySelector('.qn');
-      if (v.state === 'done') { t.innerHTML = '<b>연속 소통 끝 ✓</b>'; n.textContent = `등록 ${v.done}개 · 건너뜀 ${v.skipped}개. 수고했어요!`; }
+      if (v.state === 'done') { t.innerHTML = '<b>연속 소통 끝 ✓</b>'; n.textContent = `등록 ${v.done}개 · 건너뜀 ${v.skipped}개. 수고했어요!${v.note ? ' ' + v.note : ''}`; }
       else if (v.state === 'stopped') { t.innerHTML = '<b>연속 소통을 멈췄어요</b>'; n.textContent = v.note || '목록에서 다시 시작할 수 있어요.'; }
       else if (v.state === 'paused') { t.innerHTML = '<b>잠시 쉬어 가요</b>'; n.textContent = v.note; }
       else { t.innerHTML = `<b>연속 소통 ${q.n}/${q.total}</b>`; n.textContent = active.posted ? (active.nb === 'wait' ? '등록했어요 ✓ 서로이웃 신청을 마치면 다음 글로 넘어가요.' : '등록했어요 ✓ 곧 다음 글로 넘어가요.') : '댓글을 확인하고 등록하면 다음 글로 넘어가요.'; }

@@ -1,12 +1,12 @@
 {
   "name": "토이블록 네이버 블로그 도우미",
-  "version": "1.11.2",
-  "released_at": "2026-11-01T01:18:42Z",
-  "notes": "· 업데이트할 때 설치 폴더를 정확히 몰라도 돼요. 압축을 푼 폴더나 여러 버전을 모아 둔 폴더를 고르면 그 안에서 지금 켜져 있는 토이블록 폴더를 찾아 써요\n· 다른 폴더(복사본)를 골랐을 때 [설치 위치 확인] 버튼으로 진짜 설치 폴더를 바로 확인할 수 있어요\n· 폴더를 한 번 연결해 두면, 새 버전이 나왔을 때 누르지 않아도 저절로 바뀌어요(글쓰기 중에는 미룸)",
+  "version": "1.11.3",
+  "released_at": "2026-11-03T03:41:31Z",
+  "notes": "· 삭제되었거나 볼 수 없는 글은 이웃 새 글·키워드 노출 글 목록과 연속 소통에서 빼요(한 번 확인한 글은 30일 기억)\n· 💬 댓글 버튼으로 삭제된 글을 누르면 새 탭을 열지 않고 \"삭제된 글\"로 표시해요\n· 연속 소통 중 삭제된 글은 건너뛰고 다음 글로 넘어가요",
   "download_url": "https://github.com/toy80318-sys/blog-assets/raw/main/toyblock-extension/dist/toyblock-naver-blog-helper.zip",
   "guide_url": "https://github.com/toy80318-sys/blog-assets/blob/main/toyblock-extension/README.md#업데이트-방법",
   "store_url": "",
   "files_url": "https://raw.githubusercontent.com/toy80318-sys/blog-assets/main/toyblock-extension/dist/toyblock-extension-files.zip",
-  "files_sha256": "d911cdef56ead43ec9c9c1d36b03547596bba573fa0b4ec6f0df4c795c4344c1",
-  "files_size": 161805
+  "files_sha256": "531a1e6073ed666000749bf4fb07c620c5c19b8185a6ffd06706bfea3767a19a",
+  "files_size": 165289
 }

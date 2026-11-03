@@ -610,6 +610,7 @@
       const add = r.items.filter((x) => !seen.has(keyOf(x)));
       B.items = more ? B.items.concat(add) : add;
       B.page = page; B.more = r.more !== false && r.items.length > 0;
+      checkAlive(add);
     } else if (more && r && r.error === 'empty') B.more = false;
     else { B.error = r && r.error === 'login' ? 'login' : 'fail'; B.detail = (r && r.detail) || (r && r.error) || 'no-response'; }
     render();
@@ -626,7 +627,7 @@
     Q.scores = {};
     render();
     refreshMarks();
-    if (Q.items.length) scoreSearch();
+    if (Q.items.length) { checkAlive(Q.items); scoreSearch(); }
   }
 
   // ───────────── 추천 검색: 블로그 점수 60점 이상이거나 검색 상위 10위 안의 글 ─────────────
@@ -673,18 +674,30 @@
     Q.scoring = null;
     if (S.tab === 'cmt') render();
   }
+  // 지워졌거나 볼 수 없는 글은 목록·연속 소통에서 뺍니다(확장이 글 화면을 한 번 읽어 확인, 30일 기억)
+  async function checkAlive(list) {
+    const items = list.filter((it) => !it.dead && !it.official).map((it) => ({ blogId: it.blogId, logNo: it.logNo }));
+    if (!items.length) return;
+    S.cmt.checking = (S.cmt.checking || 0) + 1;
+    const r = await chrome.runtime.sendMessage({ type: 'nbx-cmt-alive', items }).catch(() => null);
+    S.cmt.checking--;
+    const dead = new Set((r && r.dead) || []);
+    list.forEach((it) => { if (dead.has(keyOf(it))) it.dead = true; });
+    if (S.tab === 'cmt') render();
+  }
   function openItem(list, i, relation) {
     const it = list[i];
     if (!it) return;
     const nx = list[i + 1];
     S.cmt.marks[keyOf(it)] = { ...(S.cmt.marks[keyOf(it)] || {}), o: Date.now() };
     chrome.runtime.sendMessage({ type: 'nbx-cmt-open', blogId: it.blogId, logNo: it.logNo, title: it.title, nick: it.nick, relation,
-      next: nx ? { blogId: nx.blogId, logNo: nx.logNo, title: nx.title, nick: nx.nick, relation } : null }).catch(() => {});
+      next: nx ? { blogId: nx.blogId, logNo: nx.logNo, title: nx.title, nick: nx.nick, relation } : null })
+      .then((r) => { if (r && r.error === 'deleted') { it.dead = true; flash('삭제되었거나 볼 수 없는 글이라 열지 않았어요. 목록에서 뺐어요.'); render(); } }).catch(() => {});
     render();
   }
   // 이웃 소통 목록에서 뺄 글: 네이버 공식 블로그 · 댓글을 닫은 글 · 내가 숨긴 블로그
   const HIDE_KEY = 'nbxCmtHide';
-  const skipWhy = (it) => (S.cmt.hidden[String(it.blogId).toLowerCase()] ? 'hidden' : it.official ? 'official' : it.commentOff ? 'closed' : '');
+  const skipWhy = (it) => (S.cmt.hidden[String(it.blogId).toLowerCase()] ? 'hidden' : it.official ? 'official' : it.dead ? 'deleted' : it.commentOff ? 'closed' : '');
   function loadHidden() {
     return chrome.storage.local.get(HIDE_KEY).then((r) => { S.cmt.hidden = (r && r[HIDE_KEY]) || {}; }).catch(() => {});
   }
@@ -702,7 +715,7 @@
     const recOnly = src === 'search' && S.cmt.search.recOnly;
     const shown = rows.filter((r) => (S.cmt.showHidden || !r.why) && (!recOnly || r.why || isRec(r.it)));
     const skipped = rows.length - rows.filter((r) => !r.why).length;
-    const WHY = { hidden: '숨긴 블로그', official: '네이버 공식 블로그', closed: '댓글 닫힘' };
+    const WHY = { hidden: '숨긴 블로그', official: '네이버 공식 블로그', closed: '댓글 닫힘', deleted: '삭제된 글' };
     let h = shown.length ? `<ol class="clist">${shown.map(({ it, i, why }) => {
       const mk = S.cmt.marks[keyOf(it)] || {};
       const st = why ? `<span class="cs">${WHY[why]}</span>` : mk.p ? '<span class="cs done">✓ 댓글</span>' : mk.o ? '<span class="cs">열어봄</span>' : '';
@@ -717,7 +730,7 @@
       return `<li class="ci ${mk.p || why ? 'dim' : ''}" data-act="cmtOpen" data-src="${src}" data-i="${i}" title="새 탭에서 글을 열고 댓글창으로 이동해 댓글을 복사합니다">
         <div class="ct">${esc(it.title || '(제목 없음)')}</div>${badge ? `<div class="cb">${badge}</div>` : ''}<div class="cm"><a class="home" href="https://blog.naver.com/${esc(it.blogId)}" target="_blank" rel="noopener" title="${esc(who)} 블로그로 가기">${esc(who)} ↗</a>${it.at ? `<span>· ${esc(ago(it.at))}</span>` : ''}${st}${tool}<b class="go">💬</b></div></li>`;
     }).join('')}</ol>` : '';
-    if (skipped) h += `<button class="lnk skipnote" data-act="cmtShowHidden">${S.cmt.showHidden ? '뺀 글 다시 감추기' : `댓글을 달 수 없는 공식 블로그·숨긴 블로그 글 ${skipped}개를 뺐어요 · 보기`}</button>`;
+    if (skipped) h += `<button class="lnk skipnote" data-act="cmtShowHidden">${S.cmt.showHidden ? '뺀 글 다시 감추기' : `댓글을 달 수 없는 글(공식·숨긴 블로그, 삭제된 글) ${skipped}개를 뺐어요 · 보기`}</button>`;
     return h;
   }
   // 연속 소통(반자동): 목록의 글을 차례로 열어 댓글을 채워 두고, 사용자가 [등록]을 누르면 다음 글로
@@ -900,7 +913,11 @@
       const C = S.cmt;
       const items = queueTargets().map((it) => ({ blogId: it.blogId, logNo: it.logNo, title: it.title, nick: it.nick }));
       chrome.runtime.sendMessage({ type: 'nbx-cmt-queue-start', items, relation: C.mode === 'search' ? 'other' : 'buddy' })
-        .then((r) => { if (!r || !r.ok) flash('연속 소통을 시작하지 못했어요.'); }).catch(() => {});
+        .then((r) => {
+          if (r && r.error === 'all-deleted') { const ks = new Set(items.map((x) => keyOf(x))); (C.mode === 'search' ? C.search.items : C.buddy.items).forEach((it) => { if (ks.has(keyOf(it))) it.dead = true; }); flash('남은 글이 모두 삭제된 글이에요.'); render(); }
+          else if (!r || !r.ok) flash('연속 소통을 시작하지 못했어요.');
+          else if (r.dead) flash(`삭제된 글 ${r.dead}개는 건너뛰고 시작했어요.`);
+        }).catch(() => {});
     }
     else if (act === 'queueStop') chrome.runtime.sendMessage({ type: 'nbx-cmt-queue-stop' }).catch(() => {});
     else if (act === 'queueResume') chrome.runtime.sendMessage({ type: 'nbx-cmt-queue-resume' }).catch(() => {});

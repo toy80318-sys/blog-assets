@@ -513,6 +513,56 @@ async function fetchPostLite(blogId, logNo) {
   while ((m = sre.exec(region)) && sections.length < 8) { const t = stripTags(m[1]); if (t) sections.push(t); }
   return sanitizePost({ blogId, logNo, title: meta('og:title'), nick: meta('naverblog:nickname'), sections, body: stripTags(region).slice(0, 5000) });
 }
+// ── 삭제·비공개 글 거르기: 글 화면을 한 번 읽어, 지워졌거나 볼 수 없는 글이면 30일 동안 기억하고 추천·열기에서 뺍니다
+// 확인하지 못했을 때(네트워크 오류 등)는 그대로 둡니다 — 확실히 지워진 글만 뺍니다
+const DEAD_RE = /(존재하지\s*않는\s*(게시물|게시글|글|포스트|페이지)|삭제되었거나|삭제된\s*(게시물|게시글|글|포스트)|(게시물|게시글|글)이\s*삭제|찾을\s*수\s*없는\s*(게시물|게시글|글|포스트)|비공개\s*(게시물|게시글|글|포스트)|접근\s*권한이\s*없|볼\s*수\s*없는\s*(게시물|게시글|글))/;
+const POST_BODY_RE = /se-main-container|id=["']postViewArea|id=["']post-view\d|se_component_wrap|__se_component_area/;
+const DEAD_DAYS = 30;
+const aliveMem = new Map();
+async function readDead() {
+  const r = await chrome.storage.local.get('nbxDeadPosts').catch(() => ({}));
+  const D = (r && r.nbxDeadPosts) || {};
+  const cut = Date.now() - DEAD_DAYS * 864e5;
+  Object.keys(D).forEach((k) => { if (D[k] < cut) delete D[k]; });
+  return D;
+}
+async function markDead(key) {
+  const D = await readDead();
+  D[key] = Date.now();
+  const keys = Object.keys(D);
+  if (keys.length > 1000) keys.sort((a, b) => D[a] - D[b]).slice(0, keys.length - 1000).forEach((k) => delete D[k]);
+  await chrome.storage.local.set({ nbxDeadPosts: D }).catch(() => {});
+}
+async function postAlive(blogId, logNo) {
+  const key = postKeyOf(blogId, logNo);
+  if (!key) return true;
+  if ((await readDead())[key]) return false;
+  const c = aliveMem.get(key);
+  if (c && Date.now() - c.at < 6 * 3600e3) return c.ok;
+  let ok = true;
+  try {
+    const r = await fetch(`https://blog.naver.com/PostView.naver?blogId=${encodeURIComponent(blogId)}&logNo=${logNo}&redirect=Dlog&widgetTypeCall=true&directAccess=false`, { credentials: 'include', cache: 'no-store', signal: AbortSignal.timeout(8000) });
+    if (r.status === 404 || r.status === 410) ok = false;
+    else if (r.ok) {
+      const html = await r.text();
+      if (!POST_BODY_RE.test(html) && DEAD_RE.test(stripTags(html).slice(0, 20000))) ok = false;
+    }
+  } catch (_) { ok = true; }
+  aliveMem.set(key, { ok, at: Date.now() });
+  if (aliveMem.size > 500) aliveMem.delete(aliveMem.keys().next().value);
+  if (!ok) await markDead(key);
+  return ok;
+}
+// 목록의 글들을 한꺼번에(동시에 4개씩) 확인해 지워진 글의 키를 돌려줍니다
+async function aliveCheck(items) {
+  const list = (Array.isArray(items) ? items : []).filter((x) => x && ID_RE.test(x.blogId || '') && NO_RE.test(String(x.logNo || ''))).slice(0, 60);
+  const dead = [];
+  let i = 0;
+  const worker = async () => { while (i < list.length) { const x = list[i++]; if (!(await postAlive(x.blogId, String(x.logNo)))) dead.push(postKeyOf(x.blogId, x.logNo)); } };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  return { ok: true, dead };
+}
+
 async function prefetch(next) {
   try {
     if (!next || !ID_RE.test(next.blogId || '') || !NO_RE.test(String(next.logNo || ''))) return;
@@ -569,6 +619,7 @@ async function cmtGenerate(msg) {
 
 async function openForComment(msg, sender) {
   if (!ID_RE.test(msg.blogId || '') || !NO_RE.test(String(msg.logNo || ''))) return { ok: false, error: 'bad-id' };
+  if (!(await postAlive(msg.blogId, String(msg.logNo)))) return { ok: false, error: 'deleted' };
   const props = { url: `https://blog.naver.com/${msg.blogId}/${msg.logNo}`, active: true };
   if (sender.tab) { props.index = sender.tab.index + 1; props.openerTabId = sender.tab.id; props.windowId = sender.tab.windowId; }
   const tab = await chrome.tabs.create(props);
@@ -789,6 +840,7 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
     case 'nbx-cmt-buddy': return run(buddyFeed(msg.page));
     case 'nbx-cmt-search': return typeof msg.q === 'string' && msg.q.trim() ? run(searchPosts(msg.q.trim())) : false;
     case 'nbx-cmt-log': return run(cmtLogFor(msg.keys));
+    case 'nbx-cmt-alive': return run(aliveCheck(msg.items));
     case 'nbx-ai-test': return run(aiTest(msg.provider));
     case 'nbx-cmt-queue-start': return run(queueStart(msg, sender));
     case 'nbx-cmt-queue-next': return run(queueAdvance('skip', sender.tab && sender.tab.id));
@@ -922,7 +974,7 @@ const dayKey = (t = Date.now()) => { const d = new Date(t); return `${d.getFullY
 async function getQueue() { const r = await chrome.storage.session.get('nbxQueue').catch(() => ({})); return (r && r.nbxQueue) || null; }
 function viewOf(q) {
   if (!q) return { state: 'none' };
-  return { state: q.state, i: q.i, total: q.items.length, done: q.done, skipped: q.skipped, relation: q.relation, note: q.note || '', buddy: q.buddy, at: Date.now() };
+  return { state: q.state, i: q.i, total: q.items.length, done: q.done, skipped: q.skipped, dead: q.dead || 0, relation: q.relation, note: q.note || '', buddy: q.buddy, at: Date.now() };
 }
 async function setQueue(q) {
   await chrome.storage.session.set({ nbxQueue: q }).catch(() => {});
@@ -935,6 +987,11 @@ let queueQ = Promise.resolve();
 const queued = (fn) => { const p = queueQ.then(fn, fn); queueQ = p.catch(() => {}); return p; };
 
 const postUrl = (it) => `https://blog.naver.com/${it.blogId}/${it.logNo}`;
+// 지금 차례부터 지워지지 않은 글을 찾습니다(지워진 글은 건너뜀으로 셉니다). 남은 글이 없으면 false
+async function nextAlive(q) {
+  while (q.i < q.items.length && !(await postAlive(q.items[q.i].blogId, q.items[q.i].logNo))) { q.skipped++; q.dead = (q.dead || 0) + 1; q.i++; }
+  return q.i < q.items.length;
+}
 async function queueJob(tabId, q) {
   const it = q.items[q.i];
   const J = await loadJobs();
@@ -949,15 +1006,16 @@ function queueStart(msg, sender) {
       .slice(0, QUEUE_MAX).map((x) => ({ blogId: x.blogId, logNo: String(x.logNo), title: cleanStr(x.title, 150), nick: cleanStr(x.nick, 30), relation }));
     if (!items.length) return { ok: false, error: 'empty' };
     const s = await getSettings();
-    const q = { id: Date.now(), items, i: 0, done: 0, skipped: 0, relation, buddy: relation === 'other' && s.cmt.buddyAuto, state: 'run', note: '', tabId: null };
-    const props = { url: postUrl(items[0]), active: true };
+    const q = { id: Date.now(), items, i: 0, done: 0, skipped: 0, dead: 0, relation, buddy: relation === 'other' && s.cmt.buddyAuto, state: 'run', note: '', tabId: null };
+    if (!(await nextAlive(q))) return { ok: false, error: 'all-deleted', dead: q.dead };
+    const props = { url: postUrl(items[q.i]), active: true };
     if (sender.tab) { props.index = sender.tab.index + 1; props.openerTabId = sender.tab.id; props.windowId = sender.tab.windowId; }
     const tab = await chrome.tabs.create(props);
     q.tabId = tab.id;
     await queueJob(tab.id, q);
     await setQueue(q);
-    if (items[1]) prefetch(items[1]);
-    return { ok: true, total: items.length };
+    if (items[q.i + 1]) prefetch(items[q.i + 1]);
+    return { ok: true, total: items.length, dead: q.dead };
   });
 }
 // 다음 글로: reason = 'posted'(등록함) | 'skip'(건너뜀)
@@ -968,7 +1026,7 @@ function queueAdvance(reason, fromTab) {
     if (fromTab != null && fromTab !== q.tabId) return { ok: false, error: 'other-tab' };
     if (reason === 'posted') q.done++; else q.skipped++;
     q.i++;
-    if (q.i >= q.items.length) { q.state = 'done'; q.note = ''; return { ok: true, view: await setQueue(q) }; }
+    if (!(await nextAlive(q))) { q.state = 'done'; q.note = q.dead ? `삭제된 글 ${q.dead}개는 건너뛰었어요.` : ''; return { ok: true, view: await setQueue(q) }; }
     const st = statsOf(await readLog());
     if (st.hour >= HOUR_PAUSE) {
       q.state = 'paused';
