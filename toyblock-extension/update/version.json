@@ -1,12 +1,12 @@
 {
   "name": "토이블록 네이버 블로그 도우미",
-  "version": "1.13.1",
-  "released_at": "2026-11-03T06:50:39Z",
-  "notes": "· 키워드 노출 글: 내 글을 보고 있을 때 [키워드 노출 글]을 누르면 그 글의 핵심 키워드가 검색어로 들어가고 바로 검색돼요. 다른 키워드 후보도 버튼으로 골라 검색할 수 있어요(직접 입력한 검색어는 그대로 둬요)\n· 고쳐 쓰기 화면이 \"파일에 액세스할 수 없음\"으로 뜨던 문제: 설치 폴더에 빠진 파일이 있으면 알려 주고, 업데이트 화면에서 빠진 파일을 다시 채워요. 이번 업데이트를 받으면 빠졌던 파일도 함께 채워져요\n· 🐢 천천히 소통(1.13.0): 1시간 목표·쉬는 시간을 정해 천천히 소통하고, 쉬는 동안 주의사항·팁 78가지가 바뀌며 나와요",
+  "version": "1.13.2",
+  "released_at": "2026-11-03T12:27:59Z",
+  "notes": "· 누락 글 고쳐 쓰기: 자주 묻는 질문(FAQ)을 항상 5개로 채워요. 내 글쓰기 지침에 다른 개수가 적혀 있어도 5개가 우선이고, AI가 5개보다 적게 쓰면 모자란 만큼 겹치지 않는 질문을 더 받아 채워요\n· 내 글을 보고 있을 때 [키워드 노출 글]을 누르면 그 글의 핵심 키워드로 바로 검색해요(1.13.1)\n· 설치 폴더에 빠진 파일이 있으면 알려 주고 업데이트 화면에서 다시 채워요(1.13.1)",
   "download_url": "https://github.com/toy80318-sys/blog-assets/raw/main/toyblock-extension/dist/toyblock-naver-blog-helper.zip",
   "guide_url": "https://github.com/toy80318-sys/blog-assets/blob/main/toyblock-extension/README.md#업데이트-방법",
   "store_url": "",
   "files_url": "https://raw.githubusercontent.com/toy80318-sys/blog-assets/main/toyblock-extension/dist/toyblock-extension-files.zip",
-  "files_sha256": "711349ab2d87e779d13c79c3e44ca751bcaa6c03f347e93bb59d77eb34aa357d",
-  "files_size": 203745
+  "files_sha256": "09f507125c217e6d93ded9fb43421cecefa571f128ededca29ecd1eee75c579b",
+  "files_size": 207349
 }

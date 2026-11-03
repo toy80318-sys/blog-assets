@@ -41,6 +41,7 @@ async function go() {
   busy = true;
   $('#go').disabled = true; $('#again').disabled = true;
   $('#errBox').hidden = true; $('#waitBox').hidden = false;
+  $('#waitText').textContent = 'AI가 지침에 맞춰 다시 쓰는 중이에요(30초~1분).';
   let r = await chrome.runtime.sendMessage({ type: 'nbx-cmt-rewrite', ...job }).catch((e) => ({ ok: false, error: 'ai', detail: String(e && e.message || e) }));
   // 준비가 끝나면 이 화면에서 직접 AI를 부릅니다(긴 답도 끊기지 않게)
   if (r && r.ok && r.ready) {
@@ -49,8 +50,15 @@ async function go() {
       if (!apiKey) r = { ...r, ok: false, error: 'no-key', provider: r.providerLabel };
       else {
         const text = await NBXAI.callAI(r.provider, apiKey, r.model, r.prompt.system, r.prompt.user, { maxTokens: 8192, timeout: 180e3, temperature: 0.7 });
-        const result = NBXR.parseRewrite(text);
-        r = result ? { ...r, result } : { ...r, ok: false, error: 'parse' };
+        let result = NBXR.parseRewrite(text);
+        // FAQ는 반드시 5개: 모자라면 모자란 만큼 한 번 더(최대 2번) 받아 채웁니다
+        for (let k = 0; result && result.faq.length < NBXR.FAQ_N && k < 2; k++) {
+          $('#waitText').textContent = `자주 묻는 질문을 ${NBXR.FAQ_N}개로 채우는 중이에요…`;
+          const fp = NBXR.buildFaqFill(r.post || {}, result, NBXR.FAQ_N - result.faq.length);
+          const more = await NBXAI.callAI(r.provider, apiKey, r.model, fp.system, fp.user, { maxTokens: 2048, timeout: 90e3, temperature: 0.6 }).catch(() => '');
+          result = NBXR.mergeFaq(result, more);
+        }
+        r = !result ? { ...r, ok: false, error: 'parse' } : result.faq.length < NBXR.FAQ_N ? { ...r, ok: false, error: 'faq', result } : { ...r, result };
       }
     } catch (e) { r = { ...r, ok: false, error: 'ai', detail: String((e && e.message) || e).slice(0, 200) }; }
   }
@@ -59,10 +67,12 @@ async function go() {
   if (r && r.prompt) prompt = r.prompt;
   head(r);
   if (r && r.ok && r.result) { pick = 0; render(r.result); $('#go').textContent = '✍ 다시 고쳐 쓰기'; return; }
+  if (r && r.error === 'faq' && r.result) { pick = 0; render(r.result); $('#go').textContent = '✍ 다시 고쳐 쓰기'; }
   const E = {
     'no-ai': '댓글 도우미가 "템플릿"으로 되어 있어 AI로 고쳐 쓸 수 없어요. 설정에서 AI(제미나이 무료 등)를 연결해 주세요.',
     'no-key': `${(r && r.provider) || 'AI'} 키가 없어요. 설정에서 키를 연결하면 바로 고쳐 써요.`,
     parse: 'AI 답을 읽지 못했어요. 다시 눌러 주세요(긴 글은 가끔 답이 잘려요).',
+    faq: `자주 묻는 질문을 ${NBXR.FAQ_N}개까지 채우지 못했어요. [다시 고쳐 쓰기]를 눌러 주세요.`,
     read: '글을 읽지 못했어요. 로그인 상태와 글이 공개인지 확인해 주세요.',
     'empty-body': '이 글의 본문을 읽지 못했어요(예전 에디터 글이거나 사진만 있는 글일 수 있어요). 제목만으로 새로 쓰면 원래 내용이 사라질 수 있어 멈췄어요. 아래 버튼으로 지침을 복사해 본문과 함께 AI에 붙여 넣어 주세요.',
     ai: `AI 연결에 실패했어요. ${(r && r.detail) || ''}`

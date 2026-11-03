@@ -142,7 +142,7 @@
   <div id="styles"></div>
 
   <h2 id="rewrite">누락 글 고쳐 쓰기 · 글쓰기 지침</h2>
-  <p class="desc">채널 분석의 <b>글별 결과 보기</b>에서 누락·주의 글의 <b>✍ 지침대로 고쳐 쓰기</b>를 누르면, 그 글을 읽고 아래 지침과 진단(누락 이유·처방)에 맞춰 AI가 제목 후보 3개 · 고친 본문 · FAQ를 써 줘요. 위에서 연결한 AI(제미나이 등)를 써요. 비워 두면 기본 지침(네이버 생활 정보 글 기준)을 써요.</p>
+  <p class="desc">채널 분석의 <b>글별 결과 보기</b>에서 누락·주의 글의 <b>✍ 지침대로 고쳐 쓰기</b>를 누르면, 그 글을 읽고 아래 지침과 진단(누락 이유·처방)에 맞춰 AI가 제목 후보 3개 · 고친 본문 · FAQ 5개를 써 줘요(FAQ는 지침과 상관없이 항상 5개). 위에서 연결한 AI(제미나이 등)를 써요. 비워 두면 기본 지침(네이버 생활 정보 글 기준)을 써요.</p>
   <div class="opt" style="align-items:flex-start;flex-direction:column;gap:6px">
     <textarea id="rwGuide" rows="10" maxlength="8000" style="width:100%;font:inherit;font-size:12.5px;line-height:1.55;padding:8px 10px;border:1px solid #cfd4da;border-radius:7px;resize:vertical" placeholder="내 글쓰기 지침을 붙여 넣으세요(8,000자까지). 비워 두면 기본 지침을 써요."></textarea>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button type="button" class="btn" id="rwLoad">기본 지침 불러와서 고치기</button><button type="button" class="btn" id="rwClear">비우기(기본 지침 쓰기)</button><span class="fdesc" id="rwState"></span></div>
