@@ -337,6 +337,26 @@ async function rememberTemplatesNow(blogId, drafts) {
   await chrome.storage.local.set({ nbxCmtTpl: u }).catch(() => {});
 }
 
+// 1번(맨 위) 댓글 기록: 바로 앞에 만든 1번 댓글과 같은 댓글이 다시 1번에 오지 않게 합니다(최근 12개)
+async function recentTops() {
+  const r = await chrome.storage.local.get('nbxCmtTop').catch(() => ({}));
+  return Array.isArray(r && r.nbxCmtTop) ? r.nbxCmtTop : [];
+}
+function rememberTop(d, nick) {
+  return serial(async () => {
+    const tops = await recentTops();
+    tops.push({ n: NBXC.norm(d.text, nick), t: String(d.text).slice(0, 80), id: d.tplId || '', at: Date.now() });
+    await chrome.storage.local.set({ nbxCmtTop: tops.slice(-12) }).catch(() => {});
+  });
+}
+// 첫 문장 뼈대(템플릿 문장 ID 중 첫 칭찬 문장)가 같아도 같은 댓글로 봅니다
+const headId = (tplId) => { const m = /^v2:[a-z]+:([A-Z]\d+)/.exec(String(tplId || '')); return m ? m[1] : ''; };
+function sameAsRecent(d, nick, tops) {
+  const n = NBXC.norm(d.text, nick);
+  const last = tops.slice(-3); // 바로 앞 세 번의 1번 댓글
+  return last.some((x) => x.n === n) || (d.tplId && last.some((x) => x.id && headId(x.id) && headId(x.id) === headId(d.tplId)));
+}
+
 // 클립보드: 보이지 않는 offscreen 문서에서 복사합니다(탭 포커스와 관계없이 동작)
 let offscreenP = null;
 async function ensureOffscreen() {
@@ -452,7 +472,7 @@ async function pickOpenRouterModel() {
   } catch (_) { return 'openrouter/free'; }
 }
 async function aiDrafts(provider, apiKey, model, post, cmt) {
-  const p = NBXC.buildPrompt(post, { callName: cmt.callName, style: cmt.style });
+  const p = NBXC.buildPrompt(post, { callName: cmt.callName, style: cmt.style, length: cmt.length, avoid: cmt.avoid });
   const text = await callAI(provider, apiKey, model, p.system, p.user);
   const list = NBXC.parseDrafts(text);
   if (!list.length) throw new Error('응답에서 댓글을 찾지 못했어요');
@@ -472,7 +492,7 @@ function sanitizePost(p) {
 
 // 미리 만든 초안(다음 글) — 한 번 꺼내 쓰면 지웁니다
 async function readCache() { const r = await chrome.storage.session.get('nbxCmtCache').catch(() => ({})); return r.nbxCmtCache || {}; }
-const sigOf = (cmt, provider) => [provider, NBX.modelOf(cmt, provider), cmt.callName, cmt.style].join('|');
+const sigOf = (cmt, provider) => [provider, NBX.modelOf(cmt, provider), cmt.callName, cmt.style, cmt.length || 'mix'].join('|');
 function takeCache(key, sig) {
   if (!key) return Promise.resolve(null);
   return serial(async () => {
@@ -600,18 +620,33 @@ async function cmtGenerate(msg) {
       const cached = msg.regen ? null : await takeCache(key, sigOf(c, want));
       if (cached) { drafts = cached; provider = want; }
       else {
-        try { drafts = await aiDrafts(want, apiKey, NBX.modelOf(c, want), post, { ...c, relation: msg.relation }); provider = want; }
+        try { drafts = await aiDrafts(want, apiKey, NBX.modelOf(c, want), post, { ...c, relation: msg.relation, avoid: (await recentTops()).slice(-3).map((x) => x.t) }); provider = want; }
         catch (e) { note = `${info.label} 연결에 실패해 템플릿으로 만들었어요. (${cleanStr(String(e && e.message || e), 120)})`; }
       }
     }
   }
   const used = await usedTemplates(post.blogId);
+  const tops = await recentTops();
+  used.recent = [...(used.recent || []), ...tops.map((x) => x.id).filter(Boolean)];
   if (drafts.length < 3) {
-    const extra = NBXC.compose(post, { callName: c.callName, relation: msg.relation }, used).slice(0, 3 - drafts.length);
+    const extra = NBXC.compose(post, { callName: c.callName, relation: msg.relation, length: c.length }, used).slice(0, 3 - drafts.length);
     drafts = drafts.concat(extra);
     if (provider === 'template') drafts = drafts.slice(0, 3);
     await rememberTemplates(post.blogId, extra);
   }
+  // 맨 위(1번) 댓글이 최근 1번 댓글과 같으면 다른 초안을 1번으로 올리고, 셋 다 같으면 템플릿으로 새로 만듭니다
+  if (drafts.length && sameAsRecent(drafts[0], post.nick, tops)) {
+    const j = drafts.findIndex((d) => !sameAsRecent(d, post.nick, tops));
+    if (j > 0) drafts = [drafts[j], ...drafts.filter((_, i) => i !== j)];
+    else if (provider !== 'template') drafts = [...drafts.slice(1), drafts[0]]; // AI 초안은 그대로 두고 순서만 돌림
+    else {
+      for (let k = 0; k < 4; k++) {
+        const alt = NBXC.compose(post, { callName: c.callName, relation: msg.relation, length: c.length }, used).find((d) => !sameAsRecent(d, post.nick, tops));
+        if (alt) { drafts = [alt, ...drafts.slice(0, 2)]; break; }
+      }
+    }
+  }
+  if (drafts.length) await rememberTop(drafts[0], post.nick);
   const copied = msg.copy === true ? await copyText(drafts[0].text) : false;
   if (key) await logMark(key, 'g');
   return { ok: true, drafts, provider, providerLabel: provider === 'template' ? '템플릿' : NBX.AI_PROVIDERS[provider].label, note, copied, stats: statsOf(await readLog()) };

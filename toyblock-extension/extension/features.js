@@ -117,6 +117,7 @@
       provider: 'gemini', // gemini | claude | openai | openrouter | template(키 없이 템플릿만)
       models: { gemini: '', claude: '', openai: '', openrouter: '' }, // 비어 있으면 기본 모델
       callName: true,   // 블로거 닉네임을 "○○님"으로 부르기
+      length: 'mix',    // 댓글 길이: short(짧게) · mix(짧은 것과 긴 것 섞기) · long(길게)
       prefill: false,   // 복사와 함께 댓글 입력칸에 바로 채우기
       prefetch: false,  // 목록의 다음 글 댓글을 미리 만들어 두기
       style: '',        // 말투 등 추가 요청
@@ -203,6 +204,7 @@
       provider: PROVIDER_IDS.includes(c.provider) ? c.provider : d.cmt.provider,
       models: Object.fromEntries(Object.keys(d.cmt.models).map((k) => [k, typeof models[k] === 'string' && MODEL_RE.test(models[k].trim()) ? models[k].trim() : ''])),
       callName: c.callName !== false,
+      length: ['short', 'mix', 'long'].includes(c.length) ? c.length : 'mix',
       prefill: c.prefill === true,
       prefetch: c.prefetch === true,
       style: typeof c.style === 'string' ? c.style.slice(0, 300) : '',

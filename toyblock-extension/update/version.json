@@ -1,12 +1,12 @@
 {
   "name": "토이블록 네이버 블로그 도우미",
-  "version": "1.11.3",
-  "released_at": "2026-11-03T03:41:31Z",
-  "notes": "· 삭제되었거나 볼 수 없는 글은 이웃 새 글·키워드 노출 글 목록과 연속 소통에서 빼요(한 번 확인한 글은 30일 기억)\n· 💬 댓글 버튼으로 삭제된 글을 누르면 새 탭을 열지 않고 \"삭제된 글\"로 표시해요\n· 연속 소통 중 삭제된 글은 건너뛰고 다음 글로 넘어가요",
+  "version": "1.11.4",
+  "released_at": "2026-11-03T04:16:31Z",
+  "notes": "· 템플릿 댓글 문장을 크게 늘리고 이모티콘(😊 👍 ✨ 🌷 🥰 🙌 등)을 더 자주, 더 다양하게 넣어요\n· 댓글 길이: 설정에서 짧게 · 섞어서(기본) · 길게를 고를 수 있어요. 길게 쓰면 그 글의 소제목을 짚는 문장이 더해져요\n· 맨 위(1번) 추천 댓글이 바로 앞에 만든 1번 댓글과 같지 않게 바꿨어요(AI 댓글도 똑같으면 다른 초안을 1번으로 올림)",
   "download_url": "https://github.com/toy80318-sys/blog-assets/raw/main/toyblock-extension/dist/toyblock-naver-blog-helper.zip",
   "guide_url": "https://github.com/toy80318-sys/blog-assets/blob/main/toyblock-extension/README.md#업데이트-방법",
   "store_url": "",
   "files_url": "https://raw.githubusercontent.com/toy80318-sys/blog-assets/main/toyblock-extension/dist/toyblock-extension-files.zip",
-  "files_sha256": "d2bb25fd6c71df1e8ab43514f8b06bcda620501cba40dc702261d7ff8a00e2ed",
-  "files_size": 163327
+  "files_sha256": "751f01f82e948c294404b7a4c7da826001b7973f5fb4287cb1d51c0c87843de1",
+  "files_size": 167863
 }
