@@ -415,3 +415,17 @@ chrome.storage.local.get('nbxRemote').then((r) => { NBX.applyRemote(r.nbxRemote)
 $('#disc').textContent = NBX.PARTNER.disclosure;
 
 load();
+
+// 누락 글 고쳐 쓰기 지침(길어서 크롬 동기화 저장소 대신 이 기기에만 저장)
+(function () {
+  const ta = document.getElementById('rwGuide');
+  if (!ta) return;
+  const st = document.getElementById('rwState');
+  const show = () => { st.textContent = ta.value.trim() ? `내 지침 ${ta.value.trim().length.toLocaleString('ko-KR')}자 · 저장됨` : '기본 지침을 써요'; };
+  chrome.storage.local.get('nbxRewriteGuide').then((r) => { ta.value = (r && typeof r.nbxRewriteGuide === 'string') ? r.nbxRewriteGuide : ''; show(); }).catch(() => {});
+  let t = 0;
+  ta.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { chrome.storage.local.set({ nbxRewriteGuide: ta.value.slice(0, 8000) }).then(show).catch(() => {}); }, 400); });
+  document.getElementById('rwLoad').addEventListener('click', () => { ta.value = NBXR.DEFAULT_GUIDE; chrome.storage.local.set({ nbxRewriteGuide: ta.value }).then(show).catch(() => {}); ta.focus(); });
+  document.getElementById('rwClear').addEventListener('click', () => { ta.value = ''; chrome.storage.local.set({ nbxRewriteGuide: '' }).then(show).catch(() => {}); });
+  if (location.hash === '#rewrite') setTimeout(() => document.getElementById('rewrite').scrollIntoView(), 300);
+})();

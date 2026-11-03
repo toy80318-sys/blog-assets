@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>토이블록 · 누락 글 고쳐 쓰기</title>
+<style>
+  :root { --g: #03a94d; --gi: #027a38; --line: #e3e6ea; --sub: #6b7280; --soft: #f2fbf6; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f5f6f8; color: #1f2328; font: 14.5px/1.7 -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+  .wrap { max-width: 860px; margin: 28px auto 60px; padding: 0 16px; display: grid; gap: 14px; }
+  .card { background: #fff; border-radius: 14px; padding: 20px 22px; box-shadow: 0 2px 12px rgba(0,0,0,.05); }
+  .brand { color: var(--g); font-weight: 800; font-size: 12.5px; letter-spacing: .04em; }
+  h1 { font-size: 21px; margin: 2px 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .sub { color: var(--sub); font-size: 13px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { font-size: 12px; font-weight: 700; border-radius: 99px; padding: 2px 10px; background: #f0f2f5; color: #3d4550; }
+  .chip.miss { background: #eceef1; color: #4b5563; } .chip.warn { background: #fff4e0; color: #b45309; } .chip.tag { background: var(--soft); color: var(--gi); }
+  button, a.btn { font: inherit; font-size: 13px; font-weight: 700; border-radius: 9px; padding: 7px 13px; border: 1px solid var(--g); background: #fff; color: var(--gi); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+  button.p, a.btn.p { background: var(--g); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .diag { background: #fff8ec; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 10px 12px; font-size: 14px; white-space: pre-wrap; }
+  .titles { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .titles li { display: flex; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; }
+  .titles li span { flex: 1; font-weight: 700; }
+  .titles li.on { border-color: var(--g); background: var(--soft); }
+  .body { white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; }
+  .body h3 { font-size: 16.5px; margin: 18px 0 6px; padding-left: 10px; border-left: 4px solid var(--g); }
+  .body p { margin: 0 0 12px; }
+  .faq dt { font-weight: 800; margin-top: 10px; } .faq dd { margin: 4px 0 0; color: #3d4550; }
+  ul.changes { margin: 0; padding-left: 20px; }
+  .muted { color: var(--sub); font-size: 12.5px; }
+  .wait { display: flex; gap: 10px; align-items: center; font-size: 14px; }
+  .spin { width: 18px; height: 18px; border: 3px solid #cfe9da; border-top-color: var(--g); border-radius: 50%; animation: s 0.9s linear infinite; }
+  @keyframes s { to { transform: rotate(360deg); } }
+  .err { color: #b42318; }
+  .toast { position: fixed; left: 50%; top: 18px; transform: translate(-50%, -30px); opacity: 0; transition: .25s; background: #1f2328; color: #fff; border-radius: 10px; padding: 9px 14px; font-weight: 700; font-size: 13px; pointer-events: none; }
+  .toast.on { opacity: 1; transform: translate(-50%, 0); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="brand">TOYBLOCK · 누락 글 고쳐 쓰기</div>
+    <h1 id="title">글을 읽는 중…</h1>
+    <div class="sub" id="meta"></div>
+    <div class="chips" id="chips"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="p" id="go" disabled>✍ 지침대로 고쳐 쓰기</button>
+      <a class="btn" id="edit" target="_blank" rel="noopener">네이버에서 이 글 수정하기</a>
+      <a class="btn" id="view" target="_blank" rel="noopener">원래 글 보기</a>
+      <a class="btn" href="options.html#rewrite" target="_blank">글쓰기 지침 바꾸기</a>
+    </div>
+    <p class="muted" id="guideNote"></p>
+  </div>
+
+  <div class="card" id="waitBox" hidden><div class="wait"><div class="spin"></div><span id="waitText">AI가 지침에 맞춰 다시 쓰는 중이에요(30초~1분).</span></div></div>
+
+  <div class="card" id="errBox" hidden>
+    <p class="err" id="errText"></p>
+    <div class="row">
+      <button id="copyPrompt">지침 + 원래 글을 한 번에 복사(다른 AI에 붙여 넣기)</button>
+      <a class="btn" href="options.html#cmt" target="_blank">AI 연결하기</a>
+    </div>
+    <p class="muted">복사한 내용을 Claude·ChatGPT·제미나이 채팅창에 붙여 넣으면 같은 방식으로 고쳐 써 줘요.</p>
+  </div>
+
+  <div id="out" hidden>
+    <div class="card"><h2>왜 노출이 낮을 수 있나요</h2><div class="diag" id="diag"></div><p class="muted" id="kw"></p></div>
+    <div class="card"><h2>새 제목 후보 <span class="muted">눌러서 고르기</span></h2><ul class="titles" id="titles"></ul></div>
+    <div class="card"><h2>고쳐 쓴 본문 <button id="copyBody">본문 복사</button></h2><div class="body" id="body"></div></div>
+    <div class="card"><h2>자주 묻는 질문 <button id="copyFaq">FAQ 복사</button></h2><dl class="faq" id="faq"></dl></div>
+    <div class="card"><h2>바꾼 점</h2><ul class="changes" id="changes"></ul></div>
+    <div class="card row">
+      <button class="p" id="copyAll">제목 + 본문 + FAQ 전체 복사</button>
+      <button id="again">다시 쓰기</button>
+      <span class="muted">네이버 에디터에 붙여 넣은 뒤 소제목 줄은 Ctrl+Shift+1(토이블록 단축키)로 소제목 서식을 입혀 주세요.</span>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="rewrite-core.js"></script>
+<script src="rewrite.js"></script>
+</body>
+</html>

@@ -141,6 +141,13 @@
   <p class="desc">소제목·인용구1·본문·볼드에 배정된 단축키를 누를 때 함께 적용할 글자 모양입니다. 고르면 바로 저장됩니다. 글자를 선택하지 않고 커서만 둔 상태면 그 문단 전체에 적용합니다. 글자색·배경색은 네이버 색상표에서 고른 색과 가장 가까운 칸으로 들어갑니다. 인용구 서식에는 네이버 에디터 제약상 취소선이 적용되지 않습니다.</p>
   <div id="styles"></div>
 
+  <h2 id="rewrite">누락 글 고쳐 쓰기 · 글쓰기 지침</h2>
+  <p class="desc">채널 분석의 <b>글별 결과 보기</b>에서 누락·주의 글의 <b>✍ 지침대로 고쳐 쓰기</b>를 누르면, 그 글을 읽고 아래 지침과 진단(누락 이유·처방)에 맞춰 AI가 제목 후보 3개 · 고친 본문 · FAQ를 써 줘요. 위에서 연결한 AI(제미나이 등)를 써요. 비워 두면 기본 지침(네이버 생활 정보 글 기준)을 써요.</p>
+  <div class="opt" style="align-items:flex-start;flex-direction:column;gap:6px">
+    <textarea id="rwGuide" rows="10" maxlength="8000" style="width:100%;font:inherit;font-size:12.5px;line-height:1.55;padding:8px 10px;border:1px solid #cfd4da;border-radius:7px;resize:vertical" placeholder="내 글쓰기 지침을 붙여 넣으세요(8,000자까지). 비워 두면 기본 지침을 써요."></textarea>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button type="button" class="btn" id="rwLoad">기본 지침 불러와서 고치기</button><button type="button" class="btn" id="rwClear">비우기(기본 지침 쓰기)</button><span class="fdesc" id="rwState"></span></div>
+  </div>
+
   <h2 id="move">업데이트 · 설정 옮기기</h2>
   <div class="opt" style="flex-wrap:wrap"><span id="updState" style="font-size:13px"></span>
     <button type="button" id="updNow" style="padding:6px 12px;border-radius:7px;border:1px solid #03a94d;background:#03a94d;color:#fff;cursor:pointer;font:inherit;font-size:12.5px;font-weight:700">지금 업데이트</button>
@@ -166,6 +173,7 @@
   <p id="disc" style="font-size:11px;color:#9aa3ae;margin:6px 0 0"></p>
 </div>
 <script src="features.js"></script>
+<script src="rewrite-core.js"></script>
 <script src="keystore.js"></script>
 <script src="keyconnect.js"></script>
 <script src="options.js"></script>

@@ -495,7 +495,7 @@
       const rk = r.rank ? `${r.rank}위` : st.label;
       const ad = r.status === 'miss' || r.status === 'warn' ? advise(r, ex.results) : null;
       h += `<li class="${ad ? 'ad' : ''}"><div class="row"><i class="dot" style="background:${st.color}"></i><a href="https://blog.naver.com/${esc(S.blogId)}/${esc(r.logNo)}" target="_top" title="${esc(r.title)}">${esc(r.title)}</a><span class="num">${esc(rk)}</span></div>`
-        + (ad ? `<div class="adv"><b class="t-${esc(ad.tag === '보강' || ad.tag === '수정' || ad.tag === '제목 수정' ? 'fix' : ad.tag === '기다리기' ? 'wait' : 'hide')}">${esc(ad.tag)}</b>${esc(ad.text)}</div>` : '') + '</li>';
+        + (ad ? `<div class="adv"><b class="t-${esc(ad.tag === '보강' || ad.tag === '수정' || ad.tag === '제목 수정' ? 'fix' : ad.tag === '기다리기' ? 'wait' : 'hide')}">${esc(ad.tag)}</b>${esc(ad.text)}<button class="rw" data-act="rewrite" data-no="${esc(r.logNo)}" data-st="${esc(r.status)}" data-rk="${esc(r.rank || '')}" data-tag="${esc(ad.tag)}" title="글쓰기 지침과 이 진단에 맞춰 AI가 제목·본문·FAQ를 다시 써 줘요">✍ 지침대로 고쳐 쓰기</button></div>` : '') + '</li>';
     });
     h += `</ol></details>
       <div class="note">기준: 제목 검색 시 블로그 탭 1~3위 최적 · 4~10위 활성 · 11위 이하 주의 · 결과에 없음 누락</div>
@@ -905,6 +905,7 @@
     else if (act === 'repost') refreshPost();
     else if (act === 'postExpo') runPostExposure();
     else if (act === 'settings') chrome.runtime.sendMessage({ type: 'nbx-open-options' }).catch(() => {});
+    else if (act === 'rewrite') chrome.runtime.sendMessage({ type: 'nbx-cmt-rewrite-open', blogId: S.blogId, logNo: t.dataset.no, status: t.dataset.st, rank: t.dataset.rk, tag: t.dataset.tag }).catch(() => {});
     else if (act === 'tips') chrome.runtime.sendMessage({ type: 'nbx-open-tips', hash: t.dataset.hash || '' }).catch(() => {});
     else if (act === 'cmtMode') { S.cmt.mode = t.dataset.mode; render(); if (S.cmt.mode === 'search') { const qi = root.querySelector('.q'); if (qi) qi.focus(); } }
     else if (act === 'cmtReload') loadBuddy(false);
@@ -1114,6 +1115,7 @@ details.byp[open]>summary .car{transform:rotate(180deg)}
 .list li.ad{flex-direction:column;align-items:stretch;gap:3px}
 .list .adv{font-size:11.5px;line-height:1.5;color:#3d4550;background:#f7f8fa;border-radius:7px;padding:5px 7px;margin-left:13px;word-break:keep-all;overflow-wrap:anywhere}
 .list .adv b{display:inline-block;margin-right:5px;font-size:10.5px;font-weight:800;border-radius:5px;padding:0 5px;line-height:16px}
+.list .adv .rw{display:block;margin:5px 0 1px;border:1px solid #03a94d;background:#fff;color:#027a38;border-radius:7px;padding:3px 9px;font:inherit;font-size:11.5px;font-weight:800;cursor:pointer}.list .adv .rw:hover{background:#e9f8ef}
 .adv .t-fix{background:#e9f8ef;color:#027a38}.adv .t-wait{background:#eaf1ff;color:#1d4ed8}.adv .t-hide{background:#fff3e0;color:#b45309}
 .list a{flex:1;min-width:0;color:#1f2328;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .list a:hover{color:#027a38;text-decoration:underline}

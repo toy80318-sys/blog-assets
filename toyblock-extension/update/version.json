@@ -1,12 +1,12 @@
 {
   "name": "토이블록 네이버 블로그 도우미",
-  "version": "1.12.1",
-  "released_at": "2026-11-03T04:47:08Z",
-  "notes": "· 주제별 댓글: 맛집·음식, 요리·레시피, 여행, 육아, 반려동물, 살림·정리, 인테리어, 뷰티·패션, IT·전자기기, 운동, 책·영화·공연, 생활경제·혜택, 자동차, 캠핑, 공부·자격증, 식물 — 16가지 주제를 알아보고 그 주제에 맞는 칭찬·덧붙임 문장을 넣어요\n· 목록의 분위기 표시에 주제도 함께 보여요(예: 재미 · 반려동물), 댓글 카드에도 주제를 알려 줘요\n· 글의 분위기에 맞지 않거나 다른 주제의 문장은 섞이지 않게 막았어요",
+  "version": "1.12.2",
+  "released_at": "2026-11-03T05:03:36Z",
+  "notes": "· 누락 글 고쳐 쓰기: 채널 분석의 [글별 결과 보기]에서 누락·주의 글의 [✍ 지침대로 고쳐 쓰기]를 누르면, 그 글을 읽고 글쓰기 지침과 진단에 맞춰 AI가 노출이 낮은 이유 · 새 제목 후보 3개 · 고친 본문(소제목 3~4개) · FAQ 3개 · 바꾼 점을 써 줘요\n· 설정 > 누락 글 고쳐 쓰기에서 내 글쓰기 지침을 붙여 넣을 수 있어요(비우면 네이버 생활 정보 글 기본 지침)\n· AI 키가 없을 때는 [지침 + 원래 글 복사]로 Claude·ChatGPT에 붙여 넣어 쓸 수 있어요\n· 주제별 댓글(16가지 주제)과 글 분위기 분석이 함께 들어 있어요",
   "download_url": "https://github.com/toy80318-sys/blog-assets/raw/main/toyblock-extension/dist/toyblock-naver-blog-helper.zip",
   "guide_url": "https://github.com/toy80318-sys/blog-assets/blob/main/toyblock-extension/README.md#업데이트-방법",
   "store_url": "",
   "files_url": "https://raw.githubusercontent.com/toy80318-sys/blog-assets/main/toyblock-extension/dist/toyblock-extension-files.zip",
-  "files_sha256": "f7e7433726cbb45d30e22b1a3b8193182216fc211bc1d778afd92e227b24afbc",
-  "files_size": 176971
+  "files_sha256": "d88554d93b7b297d584649b775b57abdd26c7cf793b60694f10f949078ce830a",
+  "files_size": 189791
 }

@@ -1,5 +1,5 @@
 // 토이블록 네이버 블로그 도우미 — 백그라운드
-importScripts('features.js', 'comment-core.js', 'keystore.js');
+importScripts('features.js', 'comment-core.js', 'rewrite-core.js', 'keystore.js');
 // 검색 노출 확인: 글 제목으로 네이버 블로그 검색을 한 번 하고, 결과에 나온 글 순서(블로그ID/글번호)만 돌려줍니다.
 const SEARCH_URL = 'https://search.naver.com/search.naver?ssc=tab.blog.all&sm=tab_jum&query=';
 
@@ -398,9 +398,9 @@ function aiError(status, msg) {
   if (status >= 500) return 'AI 서버가 잠시 응답하지 않아요';
   return 'HTTP ' + status;
 }
-async function postJson(url, headers, body) {
+async function postJson(url, headers, body, timeout = AI_TIMEOUT) {
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), AI_TIMEOUT);
+  const timer = setTimeout(() => ctl.abort(), timeout);
   try {
     const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body), signal: ctl.signal, credentials: 'omit', cache: 'no-store' });
     const j = await r.json().catch(() => null);
@@ -412,7 +412,8 @@ async function postJson(url, headers, body) {
     throw e;
   } finally { clearTimeout(timer); }
 }
-async function callAI(provider, apiKey, model, system, user) {
+async function callAI(provider, apiKey, model, system, user, opt = {}) {
+  const T = opt.timeout || AI_TIMEOUT;
   if (!NBX.MODEL_RE.test(model || '')) throw new Error('모델 이름을 확인해 주세요');
   // 생각(추론)을 길게 하는 모델이 답을 쓰기 전에 한도를 다 쓰지 않도록 생각을 짧게 요청하고,
   // 그 설정을 받지 않는 모델이면 설정을 빼고 한 번 더 보냅니다
@@ -422,11 +423,11 @@ async function callAI(provider, apiKey, model, system, user) {
     const body = (thinking) => ({
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: 'user', parts: [{ text: user }] }],
-      generationConfig: { temperature: 0.9, maxOutputTokens: 4096, responseMimeType: 'application/json', ...(thinking ? { thinkingConfig: { thinkingLevel: /lite/i.test(model) ? 'minimal' : 'low' } } : {}) }
+      generationConfig: { temperature: opt.temperature || 0.9, maxOutputTokens: opt.maxTokens || 4096, responseMimeType: 'application/json', ...(thinking ? { thinkingConfig: { thinkingLevel: /lite/i.test(model) ? 'minimal' : 'low' } } : {}) }
     });
     let j;
-    try { j = await postJson(url, { 'x-goog-api-key': apiKey }, body(true)); }
-    catch (e) { if (!retryPlain(e)) throw e; j = await postJson(url, { 'x-goog-api-key': apiKey }, body(false)); }
+    try { j = await postJson(url, { 'x-goog-api-key': apiKey }, body(true), T); }
+    catch (e) { if (!retryPlain(e)) throw e; j = await postJson(url, { 'x-goog-api-key': apiKey }, body(false), T); }
     const c = j && j.candidates && j.candidates[0];
     const parts = (c && c.content && c.content.parts) || [];
     const text = parts.filter((p) => !p.thought).map((p) => p.text || '').join('');
@@ -435,27 +436,27 @@ async function callAI(provider, apiKey, model, system, user) {
   }
   if (provider === 'claude') {
     const j = await postJson('https://api.anthropic.com/v1/messages', { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, {
-      model, max_tokens: 1024, system, messages: [{ role: 'user', content: user }]
-    });
+      model, max_tokens: opt.maxTokens || 1024, system, messages: [{ role: 'user', content: user }]
+    }, T);
     return ((j && j.content) || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
   }
   if (provider === 'openai') {
     const body = (reason) => ({
-      model, max_completion_tokens: 4000, response_format: { type: 'json_object' }, ...(reason ? { reasoning_effort: 'low' } : {}),
+      model, max_completion_tokens: opt.maxTokens || 4000, response_format: { type: 'json_object' }, ...(reason ? { reasoning_effort: 'low' } : {}),
       messages: [{ role: 'system', content: system }, { role: 'user', content: user }]
     });
     const reasoning = /^(gpt-5|o\d)/i.test(model);
     let j;
-    try { j = await postJson('https://api.openai.com/v1/chat/completions', { Authorization: 'Bearer ' + apiKey }, body(reasoning)); }
-    catch (e) { if (!reasoning || !retryPlain(e)) throw e; j = await postJson('https://api.openai.com/v1/chat/completions', { Authorization: 'Bearer ' + apiKey }, body(false)); }
+    try { j = await postJson('https://api.openai.com/v1/chat/completions', { Authorization: 'Bearer ' + apiKey }, body(reasoning), T); }
+    catch (e) { if (!reasoning || !retryPlain(e)) throw e; j = await postJson('https://api.openai.com/v1/chat/completions', { Authorization: 'Bearer ' + apiKey }, body(false), T); }
     return (j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
   }
   if (provider === 'openrouter') {
     // OpenAI와 같은 형식. 무료 모델마다 받는 설정이 달라 JSON 형식 지정 없이 보내고, 생각(<think>) 부분은 지웁니다
     const j = await postJson('https://openrouter.ai/api/v1/chat/completions', { Authorization: 'Bearer ' + apiKey, 'HTTP-Referer': 'https://github.com/toy80318-sys/blog-assets', 'X-Title': 'ToyBlock Naver Blog Helper' }, {
-      model, max_tokens: 1200, temperature: 0.9,
+      model, max_tokens: opt.maxTokens ? Math.min(opt.maxTokens, 6000) : 1200, temperature: 0.9,
       messages: [{ role: 'system', content: system }, { role: 'user', content: user }]
-    });
+    }, T);
     const t = (j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
     return String(t).replace(/<think>[\s\S]*?<\/think>/gi, '');
   }
@@ -479,14 +480,14 @@ async function aiDrafts(provider, apiKey, model, post, cmt) {
   return list.map((t) => ({ text: t, source: provider }));
 }
 
-function sanitizePost(p) {
+function sanitizePost(p, maxBody = 5000) {
   p = p && typeof p === 'object' ? p : {};
   return {
     blogId: ID_RE.test(p.blogId || '') ? p.blogId : '',
     logNo: NO_RE.test(String(p.logNo || '')) ? String(p.logNo) : '',
     title: cleanStr(p.title, 150), nick: cleanStr(p.nick, 30), blogName: cleanStr(p.blogName, 60),
     sections: Array.isArray(p.sections) ? p.sections.map((x) => cleanStr(x, 80)).filter(Boolean).slice(0, 10) : [],
-    body: typeof p.body === 'string' ? p.body.slice(0, 5000) : ''
+    body: typeof p.body === 'string' ? p.body.slice(0, maxBody) : ''
   };
 }
 
@@ -520,7 +521,7 @@ const decodeEnt = (s) => String(s || '').replace(/&#(\d{1,8});/g, (_, n) => safe
 const stripTags = (h) => decodeEnt(String(h || '').replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h[1-6]|tr)>/gi, '\n').replace(/<\/?(p|div|li|ul|ol|h[1-6]|tr|td|th|table|section|article|img)\b[^>]*>/gi, ' ').replace(/<[^>]+>/g, '')).replace(/[ \t ]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim();
 
 // 다음 글 미리 읽기: 글 화면(PostView)을 받아 제목·닉네임·본문만 대략 뽑습니다
-function parsePostHtml(html, blogId, logNo) {
+function parsePostHtml(html, blogId, logNo, maxBody = 5000) {
   const meta = (prop) => { const m = html.match(new RegExp(`<meta[^>]+property=["']${prop}["'][^>]+content=(?:"([^"]*)"|'([^']*)')`, 'i')); return m ? decodeEnt(m[1] != null ? m[1] : m[2]) : ''; };
   const i = html.indexOf('se-main-container');
   const region = i >= 0 ? html.slice(i, i + 80000) : '';
@@ -528,7 +529,7 @@ function parsePostHtml(html, blogId, logNo) {
   const sre = /se-sectionTitle[\s\S]{0,600}?se-text-paragraph[^>]*>([\s\S]*?)<\/p>/g;
   let m;
   while ((m = sre.exec(region)) && sections.length < 8) { const t = stripTags(m[1]); if (t) sections.push(t); }
-  return sanitizePost({ blogId, logNo, title: meta('og:title'), nick: meta('naverblog:nickname'), sections, body: stripTags(region).slice(0, 5000) });
+  return sanitizePost({ blogId, logNo, title: meta('og:title'), nick: meta('naverblog:nickname'), sections, body: stripTags(region).slice(0, maxBody) }, maxBody);
 }
 async function fetchPostLite(blogId, logNo) {
   const r = await fetch(`https://blog.naver.com/PostView.naver?blogId=${encodeURIComponent(blogId)}&logNo=${logNo}&redirect=Dlog&widgetTypeCall=true&directAccess=false`, { credentials: 'include', cache: 'no-store' });
@@ -536,6 +537,31 @@ async function fetchPostLite(blogId, logNo) {
   const html = await r.text();
   return parsePostHtml(html, blogId, logNo);
 }
+// ── 누락·주의 글 고쳐 쓰기: 글을 읽고, 글쓰기 지침(설정에서 바꿀 수 있음)과 진단을 붙여 AI에게 다시 쓰게 합니다
+async function rewritePost(msg) {
+  if (!ID_RE.test(msg.blogId || '') || !NO_RE.test(String(msg.logNo || ''))) return { ok: false, error: 'bad-id' };
+  const r = await fetch(`https://blog.naver.com/PostView.naver?blogId=${encodeURIComponent(msg.blogId)}&logNo=${msg.logNo}&redirect=Dlog&widgetTypeCall=true&directAccess=false`, { credentials: 'include', cache: 'no-store' }).catch(() => null);
+  if (!r || !r.ok) return { ok: false, error: 'read', detail: r ? 'HTTP ' + r.status : 'network' };
+  const post = parsePostHtml(await r.text(), msg.blogId, String(msg.logNo), 12000);
+  if (!post.title && !post.body) return { ok: false, error: 'read' };
+  const g = (await chrome.storage.local.get('nbxRewriteGuide').catch(() => ({}))).nbxRewriteGuide;
+  const diag = { status: msg.status === 'warn' ? 'warn' : 'miss', rank: Number(msg.rank) || null, tag: cleanStr(msg.tag, 20) };
+  const prompt = NBXR.buildRewrite(post, diag, typeof g === 'string' ? g : '');
+  const s = await getSettings();
+  const prov = s.cmt.provider;
+  const info = { post: { title: post.title, chars: String(post.body || '').replace(/\s/g, '').length, sections: post.sections }, prompt, customGuide: !!(typeof g === 'string' && g.trim()) };
+  if (msg.promptOnly) return { ok: true, ...info };
+  if (prov === 'template') return { ok: false, error: 'no-ai', ...info };
+  const apiKey = (await getKeys())[prov];
+  if (!apiKey) return { ok: false, error: 'no-key', provider: NBX.AI_PROVIDERS[prov].label, ...info };
+  try {
+    const text = await callAI(prov, apiKey, NBX.modelOf(s.cmt, prov), prompt.system, prompt.user, { maxTokens: 8192, timeout: 150e3, temperature: 0.7 });
+    const result = NBXR.parseRewrite(text);
+    if (!result) return { ok: false, error: 'parse', provider: NBX.AI_PROVIDERS[prov].label, ...info };
+    return { ok: true, result, provider: NBX.AI_PROVIDERS[prov].label, ...info };
+  } catch (e) { return { ok: false, error: 'ai', detail: cleanStr(String((e && e.message) || e), 200), provider: NBX.AI_PROVIDERS[prov].label, ...info }; }
+}
+
 // ── 삭제·비공개 글 거르기: 글 화면을 한 번 읽어, 지워졌거나 볼 수 없는 글이면 30일 동안 기억하고 추천·열기에서 뺍니다
 // 확인하지 못했을 때(네트워크 오류 등)는 그대로 둡니다 — 확실히 지워진 글만 뺍니다
 const DEAD_RE = /(존재하지\s*않는\s*(게시물|게시글|글|포스트|페이지)|삭제되었거나|삭제된\s*(게시물|게시글|글|포스트)|(게시물|게시글|글)이\s*삭제|찾을\s*수\s*없는\s*(게시물|게시글|글|포스트)|비공개\s*(게시물|게시글|글|포스트)|접근\s*권한이\s*없|볼\s*수\s*없는\s*(게시물|게시글|글))/;
@@ -549,7 +575,8 @@ async function readDead() {
   Object.keys(D).forEach((k) => { if (D[k] < cut) delete D[k]; });
   return D;
 }
-async function markDead(key) {
+function markDead(key) { return serial(() => markDeadNow(key)); } // 동시에 여러 글을 기록해도 서로 덮어쓰지 않게
+async function markDeadNow(key) {
   const D = await readDead();
   D[key] = Date.now();
   const keys = Object.keys(D);
@@ -930,6 +957,12 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
     case 'nbx-cmt-search': return typeof msg.q === 'string' && msg.q.trim() ? run(searchPosts(msg.q.trim())) : false;
     case 'nbx-cmt-log': return run(cmtLogFor(msg.keys));
     case 'nbx-cmt-alive': return run(aliveCheck(msg.items));
+    case 'nbx-cmt-rewrite-open': {
+      if (!ID_RE.test(msg.blogId || '') || !NO_RE.test(String(msg.logNo || ''))) return false;
+      const q = new URLSearchParams({ b: msg.blogId, n: String(msg.logNo), s: msg.status === 'warn' ? 'warn' : 'miss', r: String(Number(msg.rank) || ''), t: cleanStr(msg.tag, 20) });
+      return run(chrome.tabs.create({ url: chrome.runtime.getURL('rewrite.html?' + q) }).then(() => ({ ok: true })));
+    }
+    case 'nbx-cmt-rewrite': return run(rewritePost(msg));
     case 'nbx-ai-test': return run(aiTest(msg.provider));
     case 'nbx-cmt-queue-start': return run(queueStart(msg, sender));
     case 'nbx-cmt-queue-next': return run(queueAdvance('skip', sender.tab && sender.tab.id));
