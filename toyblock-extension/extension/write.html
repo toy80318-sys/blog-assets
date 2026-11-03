@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>토이블록 · AI 글쓰기</title>
+<style>
+  :root { --g: #03a94d; --gi: #027a38; --line: #e3e6ea; --sub: #6b7280; --soft: #f2fbf6; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f5f6f8; color: #1f2328; font: 14.5px/1.65 -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 18px 14px 40px; display: grid; gap: 12px; }
+  .card { background: #fff; border-radius: 14px; padding: 16px 18px; box-shadow: 0 2px 12px rgba(0,0,0,.05); display: grid; gap: 10px; }
+  .brand { color: var(--g); font-weight: 800; font-size: 12.5px; letter-spacing: .04em; }
+  h1 { font-size: 19px; margin: 0; }
+  h2 { font-size: 15.5px; margin: 0; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  label.f { display: grid; gap: 4px; font-size: 13px; font-weight: 700; color: #3d4550; }
+  label.f small { font-weight: 400; color: var(--sub); }
+  input[type=text], textarea, select { font: inherit; font-size: 14px; border: 1px solid #cfd4da; border-radius: 9px; padding: 8px 10px; width: 100%; background: #fff; }
+  textarea { resize: vertical; min-height: 84px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .cats { display: flex; flex-wrap: wrap; gap: 6px; }
+  .cats button { border: 1px solid #cfd4da; background: #fff; border-radius: 99px; padding: 4px 11px; font: inherit; font-size: 13px; cursor: pointer; color: #3d4550; }
+  .cats button.on { background: var(--g); color: #fff; border-color: var(--g); font-weight: 700; }
+  .chk { display: flex; gap: 6px; align-items: center; font-size: 13px; color: #3d4550; }
+  button.btn, a.btn { font: inherit; font-size: 13.5px; font-weight: 700; border-radius: 9px; padding: 8px 14px; border: 1px solid var(--g); background: #fff; color: var(--gi); cursor: pointer; text-decoration: none; }
+  button.p { background: var(--g); color: #fff; }
+  button.big { font-size: 15px; padding: 11px 16px; width: 100%; }
+  button:disabled { opacity: .5; cursor: default; }
+  .muted { color: var(--sub); font-size: 12.5px; }
+  .titles { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .titles li { display: flex; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; cursor: pointer; }
+  .titles li span { flex: 1; font-weight: 700; }
+  .titles li.on { border-color: var(--g); background: var(--soft); }
+  .body { word-break: keep-all; overflow-wrap: anywhere; max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .body h3 { font-size: 15.5px; margin: 14px 0 4px; padding-left: 9px; border-left: 4px solid var(--g); }
+  .body p { margin: 0 0 10px; }
+  .faq dt { font-weight: 800; margin-top: 8px; } .faq dd { margin: 3px 0 0; color: #3d4550; }
+  .tags { display: flex; flex-wrap: wrap; gap: 5px; } .tags span { background: #f0f2f5; border-radius: 99px; padding: 2px 9px; font-size: 12.5px; }
+  .wait { display: flex; gap: 10px; align-items: center; }
+  .spin { width: 18px; height: 18px; border: 3px solid #cfe9da; border-top-color: var(--g); border-radius: 50%; animation: s .9s linear infinite; }
+  @keyframes s { to { transform: rotate(360deg); } }
+  .err { color: #b42318; }
+  .ok { color: var(--gi); font-weight: 700; }
+  .toast { position: fixed; left: 50%; top: 14px; transform: translate(-50%, -30px); opacity: 0; transition: .25s; background: #1f2328; color: #fff; border-radius: 10px; padding: 8px 14px; font-weight: 700; font-size: 13px; pointer-events: none; }
+  .toast.on { opacity: 1; transform: translate(-50%, 0); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="brand">TOYBLOCK · AI 글쓰기</div>
+    <h1>주제만 적으면 글 한 편을 써서 에디터에 넣어 드려요</h1>
+    <p class="muted" id="ctx"></p>
+    <label class="f">주제·키워드 <small>예) 장마철 우산 말리고 보관하는 방법</small><input type="text" id="topic" maxlength="100"></label>
+    <div class="f" style="display:grid;gap:4px;font-size:13px;font-weight:700;color:#3d4550">글 종류<div class="cats" id="cats"></div></div>
+    <label class="f">강조할 내용·사실 <small>가격·장소·시간·직접 해 본 것처럼 AI가 알 수 없는 사실은 여기 적어 주세요. 적지 않은 경험은 지어내지 않아요.</small><textarea id="facts" maxlength="3000"></textarea></label>
+    <div class="grid3">
+      <label class="f">분량<select id="length"></select></label>
+      <label class="f">말투<select id="tone"></select></label>
+      <label class="f">FAQ<select disabled><option>5개(항상)</option></select></label>
+    </div>
+    <label class="chk"><input type="checkbox" id="natural" checked> AI 티 나는 표현 줄이기(번역투·상투구 막기)</label>
+    <p class="muted" id="guideNote"></p>
+    <button class="btn p big" id="go">✍ 글 쓰기</button>
+  </div>
+
+  <div class="card" id="waitBox" hidden><div class="wait"><div class="spin"></div><span id="waitText">AI가 글을 쓰는 중이에요(30초~1분).</span></div></div>
+  <div class="card" id="errBox" hidden><p class="err" id="errText"></p><div class="row"><a class="btn" href="options.html#cmt" target="_blank">AI 연결하기</a><a class="btn" href="options.html#rewrite" target="_blank">글쓰기 지침 바꾸기</a></div></div>
+
+  <div id="out" hidden>
+    <div class="card"><h2>제목 후보 <span class="muted">눌러서 고르기</span></h2><ul class="titles" id="titles"></ul><p class="muted" id="kw"></p></div>
+    <div class="card"><h2>본문 <span class="muted" id="chars"></span></h2><div class="body" id="body"></div></div>
+    <div class="card"><h2>자주 묻는 질문</h2><dl class="faq" id="faq"></dl></div>
+    <div class="card"><h2>태그 <button class="btn" id="copyTags">태그 복사</button></h2><div class="tags" id="tags"></div><p class="muted">발행 창의 태그 칸에 붙여 넣어 주세요.</p></div>
+    <div class="card">
+      <button class="btn p big" id="apply">⬇ 에디터에 넣기</button>
+      <p class="muted">제목 칸이 비어 있으면 고른 제목을 넣고, 본문 맨 끝에 문단과 소제목을 차례로 입력해요. 넣는 동안 크롬 위쪽에 "디버깅 중" 줄이 잠깐 보였다가 사라져요. 발행은 직접 해 주세요.</p>
+      <p id="applyMsg"></p>
+      <div class="row"><button class="btn" id="copyTitle">제목 복사</button><button class="btn" id="copyBody">본문 복사</button><button class="btn" id="again">다시 쓰기</button></div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="features.js"></script>
+<script src="keystore.js"></script>
+<script src="ai-core.js"></script>
+<script src="rewrite-core.js"></script>
+<script src="write-core.js"></script>
+<script src="write.js"></script>
+</body>
+</html>

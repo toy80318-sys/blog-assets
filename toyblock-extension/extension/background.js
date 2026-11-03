@@ -182,10 +182,51 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
   chrome.tabs.sendMessage(tab.id, { type: 'nbx-slot', slot: Number(m[1]) - 1 }).catch(() => {});
 });
 
+// AI 글쓰기: 글을 에디터에 넣는 동안만 디버거를 붙여 두고(글자 입력·엔터), 끝나면 바로 뗍니다.
+// 사용자가 [에디터에 넣기]를 누른 글쓰기 탭에서만 열리고, 60초 동안 쓰지 않으면 저절로 닫힙니다.
+const dbgSessions = new Map(); // tabId → 마지막 사용 시각
+const writeArm = new Map();    // tabId → [에디터에 넣기]를 누른 뒤 허용 시각
+function dbgTouch(tabId) {
+  dbgSessions.set(tabId, Date.now());
+  setTimeout(() => { const t = dbgSessions.get(tabId); if (t && Date.now() - t >= 59e3) dbgEnd(tabId); }, 60e3);
+}
+async function dbgBegin(tabId) {
+  if (!chrome.debugger) return { ok: false, error: 'no-permission' };
+  if (!((writeArm.get(tabId) || 0) > Date.now())) return { ok: false, error: 'not-armed' };
+  if (dbgSessions.has(tabId)) { dbgTouch(tabId); return { ok: true }; }
+  try { await chrome.debugger.attach({ tabId }, '1.3'); } catch (e) { return { ok: false, error: 'attach: ' + (e.message || e) }; }
+  dbgTouch(tabId);
+  return { ok: true };
+}
+async function dbgEnd(tabId) {
+  if (!dbgSessions.has(tabId)) return { ok: true };
+  dbgSessions.delete(tabId);
+  await chrome.debugger.detach({ tabId }).catch(() => {});
+  return { ok: true };
+}
+async function dbgText(tabId, text) {
+  if (!dbgSessions.has(tabId)) return { ok: false, error: 'no-session' };
+  dbgTouch(tabId);
+  try { await chrome.debugger.sendCommand({ tabId }, 'Input.insertText', { text: String(text).slice(0, 4000) }); return { ok: true }; }
+  catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+}
+if (chrome.debugger && chrome.debugger.onDetach) chrome.debugger.onDetach.addListener((src) => { if (src && src.tabId != null) dbgSessions.delete(src.tabId); });
+const isEditorSender = (sender) => { try { return !!sender.tab && /^https:\/\/([a-z0-9-]+\.)?blog\.naver\.com\//.test(sender.url || (sender.tab && sender.tab.url) || ''); } catch (_) { return false; } };
+
 // 확실한 엔터 모드: 크롬 디버거로 실제 키보드와 같은 엔터를 현재 탭에 한 번 넣고 바로 연결을 끊습니다
 async function trustedEnter(tabId) {
   if (!chrome.debugger) return { ok: false, error: 'no-permission' };
   const target = { tabId };
+  if (dbgSessions.has(tabId)) {
+    // AI 글쓰기로 이미 붙어 있으면 그대로 엔터만 넣습니다
+    dbgTouch(tabId);
+    try {
+      const base = { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13, modifiers: 0 };
+      await chrome.debugger.sendCommand(target, 'Input.dispatchKeyEvent', { type: 'keyDown', text: '\r', unmodifiedText: '\r', ...base });
+      await chrome.debugger.sendCommand(target, 'Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+      return { ok: true };
+    } catch (e) { return { ok: false, error: 'dispatch: ' + (e.message || e) }; }
+  }
   try { await chrome.debugger.attach(target, '1.3'); } catch (e) { return { ok: false, error: 'attach: ' + (e.message || e) }; }
   try {
     const base = { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13, modifiers: 0 };
@@ -205,6 +246,44 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
     searchBlog(msg.query).then(send, (e) => send({ ok: false, error: String((e && e.message) || e) }));
     return true;
   }
+  // ── AI 글쓰기
+  if (msg.type === 'nbx-write-open' && isEditorSender(sender)) {
+    const q = new URLSearchParams({ tab: String(sender.tab.id), frame: String(sender.frameId || 0), photos: String(Math.max(0, Math.min(99, Number(msg.photos) || 0))), title: String(msg.title || '').slice(0, 100) });
+    chrome.windows.create({ url: chrome.runtime.getURL('write.html?' + q), type: 'popup', width: 600, height: 860, focused: true })
+      .then(() => send({ ok: true }), (e) => send({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (msg.type === 'nbx-write-apply' && String(sender.url || '').startsWith(chrome.runtime.getURL('write.html'))) {
+    (async () => {
+      const tabId = Number(msg.tabId), frameId = Number(msg.frameId) || 0;
+      const tab = await chrome.tabs.get(tabId).catch(() => null);
+      if (!tab || !/^https:\/\/([a-z0-9-]+\.)?blog\.naver\.com\//.test(tab.url || '')) return { ok: false, error: 'no-editor' };
+      await chrome.windows.update(tab.windowId, { focused: true }).catch(() => {});
+      await chrome.tabs.update(tabId, { active: true }).catch(() => {});
+      const art = msg.article || {};
+      const article = { title: String(art.title || '').slice(0, 120), blocks: (Array.isArray(art.blocks) ? art.blocks : []).slice(0, 200).map((b) => ({ t: b && b.t === 'h' ? 'h' : 'p', x: String((b && b.x) || '').slice(0, 3000) })).filter((b) => b.x) };
+      writeArm.set(tabId, Date.now() + 5 * 60e3); // 이 탭에서만, 5분 동안 디버거 입력을 허용
+      try { return await chrome.tabs.sendMessage(tabId, { type: 'nbx-write-insert', article }, { frameId }); }
+      catch (e) { return { ok: false, error: 'send: ' + String((e && e.message) || e) }; }
+      finally { writeArm.delete(tabId); dbgEnd(tabId); }
+    })().then((r) => send(r || { ok: false }), (e) => send({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (msg.type === 'nbx-write-prep') {
+    (async () => {
+      const s = await getSettings();
+      const prov = s.cmt.provider;
+      const g = (await chrome.storage.local.get('nbxRewriteGuide').catch(() => ({}))).nbxRewriteGuide;
+      const base = { customGuide: !!(typeof g === 'string' && g.trim()), guide: typeof g === 'string' ? g : '' };
+      if (prov === 'template') return { ok: false, error: 'no-ai', ...base };
+      if (!(await getKeys())[prov]) return { ok: false, error: 'no-key', provider: NBX.AI_PROVIDERS[prov].label, ...base };
+      return { ok: true, provider: prov, providerLabel: NBX.AI_PROVIDERS[prov].label, model: NBX.modelOf(s.cmt, prov), ...base };
+    })().then(send, (e) => send({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (msg.type === 'nbx-dbg-begin' && isEditorSender(sender)) { dbgBegin(sender.tab.id).then(send); return true; }
+  if (msg.type === 'nbx-dbg-text' && isEditorSender(sender) && typeof msg.text === 'string') { dbgText(sender.tab.id, msg.text).then(send); return true; }
+  if (msg.type === 'nbx-dbg-end' && isEditorSender(sender)) { dbgEnd(sender.tab.id).then(send); return true; }
   if (msg.type === 'nbx-trusted-enter' && sender.tab && sender.tab.id) {
     trustedEnter(sender.tab.id).then(send, (e) => send({ ok: false, error: String(e) }));
     return true;

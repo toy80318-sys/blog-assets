@@ -1,12 +1,12 @@
 {
   "name": "토이블록 네이버 블로그 도우미",
-  "version": "1.13.3",
-  "released_at": "2026-11-03T12:49:30Z",
-  "notes": "· 🐢 천천히 소통: 댓글을 등록한 뒤 다음 글까지 쉬는 시간을 1분~1분 30초 사이로 맞췄어요(글마다 조금씩 달라요). 쉬는 동안에는 지금처럼 주의사항·팁이 바뀌며 나와요\n· 누락 글 고쳐 쓰기: 자주 묻는 질문(FAQ)을 항상 5개로 채워요(1.13.2)",
+  "version": "1.14.0",
+  "released_at": "2026-11-03T13:57:42Z",
+  "notes": "· ✍ AI 글쓰기: 글쓰기 화면 버튼 줄의 [✍ AI 글쓰기]를 누르면 주제·글 종류·강조할 내용·분량·말투를 받아 AI가 글 한 편을 써 줘요(제목 후보 3개 · 소제목 본문 · 자주 묻는 질문 5개 · 태그)\n· [에디터에 넣기]를 누르면 비어 있는 제목 칸에 고른 제목을 넣고, 본문 끝에 문단과 소제목(소제목 서식)을 차례로 입력해요. 발행은 직접 해요\n· 내 글쓰기 지침(설정 > 누락 글 고쳐 쓰기)을 그대로 따르고, AI 티 나는 번역투·상투구를 줄여요. 적지 않은 경험·가격·통계는 지어내지 않아요\n· 넣다가 멈추면 남은 본문을 복사해 두어 Ctrl+V로 이어 붙일 수 있어요",
   "download_url": "https://github.com/toy80318-sys/blog-assets/raw/main/toyblock-extension/dist/toyblock-naver-blog-helper.zip",
   "guide_url": "https://github.com/toy80318-sys/blog-assets/blob/main/toyblock-extension/README.md#업데이트-방법",
   "store_url": "",
   "files_url": "https://raw.githubusercontent.com/toy80318-sys/blog-assets/main/toyblock-extension/dist/toyblock-extension-files.zip",
-  "files_sha256": "2fe14c03ef1318ef91f3110670913c5cf51e4571abd1f77c13a3b50035a9e05d",
-  "files_size": 204701
+  "files_sha256": "0d7f102897a7be96ab58026e5ab973d587c4339fb2882e9f0b9e41b9111bc78a",
+  "files_size": 220614
 }

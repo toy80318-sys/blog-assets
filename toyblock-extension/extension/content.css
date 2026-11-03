@@ -63,3 +63,6 @@
 #nbx-toast.nbx-show { opacity: 1; transform: translate(-50%, 0); }
 #nbx-toast.nbx-err { background: #c62828; }
 #nbx-toast.nbx-warn { background: #b26a00; }
+
+.nbx-btn.nbx-ai { background: #03a94d !important; color: #fff !important; border-color: #03a94d !important; font-weight: 800; }
+.nbx-btn.nbx-ai:hover { background: #027a38 !important; }

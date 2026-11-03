@@ -393,8 +393,8 @@
     // 브라우저 기본 줄바꿈 등 에디터 밖에서 바꾼 내용을 에디터가 되돌리는지까지 확인합니다
     const settled = async (ms) => (await waitFor(changed, ms)) && (await sleep(120), changed());
 
-    // ① 확실한 엔터 모드: 실제 키보드와 같은 엔터(크롬 디버거)
-    if (settings.trustedEnter) {
+    // ① 확실한 엔터 모드: 실제 키보드와 같은 엔터(크롬 디버거) — AI 글 넣는 중에는 항상 이 방법
+    if (settings.trustedEnter || writing) {
       const r = await chrome.runtime.sendMessage({ type: 'nbx-trusted-enter' }).catch((e) => ({ ok: false, error: String(e) }));
       trace.steps.push({ way: 'debugger', ok: !!(r && r.ok), error: r && r.error });
       if (r && r.ok && await settled(800)) { trace.result = 'debugger'; return true; }
@@ -424,6 +424,87 @@
     trace.result = 'failed';
     trace.after = paraCount();
     return false;
+  }
+
+  // ───────────────── AI 글쓰기: 받은 글을 에디터에 넣기 ─────────────────
+  // 제목 칸이 비어 있으면 제목을 넣고, 본문 맨 끝에 문단·소제목을 차례로 입력합니다(크롬 디버거로 실제 타이핑처럼).
+  // 발행은 하지 않습니다.
+  let writing = false;
+  const TITLE_P = '.se-documentTitle .se-text-paragraph, .se-title-text .se-text-paragraph';
+  function caretTo(el, atStart) {
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    r.collapse(!!atStart);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    const ed = el.closest('[contenteditable="true"]');
+    if (ed && document.activeElement !== ed) ed.focus({ preventScroll: true });
+  }
+  const bodyParas = () => [...document.querySelectorAll('.se-text-paragraph')].filter((p) => !p.closest('.se-documentTitle, .se-title-text') && p.closest('[contenteditable="true"]'));
+  async function typeText(text) {
+    const before = (caretPara() || {}).textContent || '';
+    const r = await chrome.runtime.sendMessage({ type: 'nbx-dbg-text', text }).catch(() => null);
+    if (!r || !r.ok) return false;
+    const probe = text.slice(0, 12);
+    return !!(await waitFor(() => { const p = caretPara(); return p && (p.textContent || '').includes(probe) && (p.textContent || '') !== before; }, 1500));
+  }
+  async function insertArticle(a) {
+    if (writing) return { ok: false, error: 'busy' };
+    writing = true;
+    const out = { ok: false, title: false, done: 0, total: (a.blocks || []).length };
+    try {
+      const st = await chrome.runtime.sendMessage({ type: 'nbx-dbg-begin' }).catch(() => null);
+      if (!st || !st.ok) { out.error = 'debugger'; return out; }
+      toast('AI 글을 넣는 중이에요… 끝날 때까지 키보드·마우스를 잠시 쉬어 주세요', 'ok');
+      const tp = document.querySelector(TITLE_P);
+      if (tp && a.title && !tp.textContent.trim()) {
+        caretTo(tp, false);
+        await sleep(120);
+        out.title = await typeText(a.title);
+      }
+      const paras = bodyParas();
+      const last = paras[paras.length - 1];
+      if (!last) { out.error = 'no-body'; return out; }
+      caretTo(last, false);
+      await sleep(150);
+      if (last.textContent.trim() && !(await pressEnter())) { out.error = 'enter'; return out; }
+      for (const b of a.blocks) {
+        if (b.t === 'h') { await setFormat('sectionTitle', '소제목').catch(() => {}); await sleep(60); }
+        if (!(await typeText(b.x))) { out.error = 'type'; return out; }
+        out.done++;
+        if (out.done < out.total || b.t === 'h') {
+          if (!(await pressEnter())) { out.error = 'enter'; return out; }
+          await sleep(40);
+          if (b.t === 'h') { await setFormat('text', '본문').catch(() => {}); await sleep(40); }
+        }
+      }
+      out.ok = true;
+      toast(`AI 글을 넣었어요 ✓ (${out.done}문단) 읽어 보고 다듬은 뒤 직접 발행해 주세요`, 'ok');
+      return out;
+    } catch (e) {
+      out.error = String((e && e.message) || e).slice(0, 120);
+      return out;
+    } finally {
+      writing = false;
+      chrome.runtime.sendMessage({ type: 'nbx-dbg-end' }).catch(() => {});
+      if (!out.ok) toast(`AI 글을 다 넣지 못했어요(${out.done}/${out.total}). 글쓰기 창의 [본문 복사]로 붙여 넣어 주세요`, 'err');
+    }
+  }
+  function openWriter() {
+    const tp = document.querySelector(TITLE_P);
+    const photos = document.querySelectorAll('.se-component.se-image, .se-component.se-imageStrip, .se-component.se-imageGroup').length;
+    chrome.runtime.sendMessage({ type: 'nbx-write-open', photos, title: tp ? tp.textContent.trim() : '' }).catch(() => {});
+  }
+  function makeAiBtn() {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'nbx-btn nbx-ai';
+    b.textContent = '✍ AI 글쓰기';
+    b.title = '주제와 강조할 내용만 적으면 AI가 글을 써서 이 에디터에 넣어 줘요(발행은 직접)';
+    b.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); });
+    b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); hidePop(); openWriter(); });
+    return b;
   }
 
   const ACTIONS = {
@@ -631,6 +712,7 @@
       if (f.key) { const k = document.createElement('small'); k.textContent = shortKey(f.key); b.appendChild(k); }
       bar.appendChild(b);
     });
+    bar.appendChild(makeAiBtn());
     const gear = document.createElement('button');
     gear.type = 'button';
     gear.className = 'nbx-gear';
@@ -736,6 +818,7 @@
     const wrap = document.createElement('span');
     wrap.className = 'nbx-btns';
     uiFeatures().forEach((f) => wrap.appendChild(makeBtn(f.id, NBX.byId[f.id].label, f.title)));
+    wrap.appendChild(makeAiBtn());
     bar.appendChild(wrap);
     const min = document.createElement('button');
     min.className = 'nbx-min';
@@ -843,6 +926,7 @@
   chrome.runtime.onMessage.addListener((msg, _s, send) => {
     if (!isEditor()) return false; // 에디터가 없는 프레임은 응답하지 않습니다
     if (msg.type === 'nbx-diagnose') { send({ editor: true, items: diagnose() }); return false; }
+    if (msg.type === 'nbx-write-insert' && msg.article) { insertArticle(msg.article).then(send, (e) => send({ ok: false, error: String(e) })); return true; }
     if (msg.type === 'nbx-run') { runFeature(msg.feature); send({ ok: true }); return false; }
     if (msg.type === 'nbx-slot' && msg.slot >= 0 && msg.slot < NBX.SLOT_COUNT) {
       // 크롬 단축키로 들어온 실행 요청
