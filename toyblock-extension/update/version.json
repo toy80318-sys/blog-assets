@@ -1,12 +1,12 @@
 {
   "name": "토이블록 네이버 블로그 도우미",
-  "version": "1.13.2",
-  "released_at": "2026-11-03T12:27:59Z",
-  "notes": "· 누락 글 고쳐 쓰기: 자주 묻는 질문(FAQ)을 항상 5개로 채워요. 내 글쓰기 지침에 다른 개수가 적혀 있어도 5개가 우선이고, AI가 5개보다 적게 쓰면 모자란 만큼 겹치지 않는 질문을 더 받아 채워요\n· 내 글을 보고 있을 때 [키워드 노출 글]을 누르면 그 글의 핵심 키워드로 바로 검색해요(1.13.1)\n· 설치 폴더에 빠진 파일이 있으면 알려 주고 업데이트 화면에서 다시 채워요(1.13.1)",
+  "version": "1.13.3",
+  "released_at": "2026-11-03T12:49:30Z",
+  "notes": "· 🐢 천천히 소통: 댓글을 등록한 뒤 다음 글까지 쉬는 시간을 1분~1분 30초 사이로 맞췄어요(글마다 조금씩 달라요). 쉬는 동안에는 지금처럼 주의사항·팁이 바뀌며 나와요\n· 누락 글 고쳐 쓰기: 자주 묻는 질문(FAQ)을 항상 5개로 채워요(1.13.2)",
   "download_url": "https://github.com/toy80318-sys/blog-assets/raw/main/toyblock-extension/dist/toyblock-naver-blog-helper.zip",
   "guide_url": "https://github.com/toy80318-sys/blog-assets/blob/main/toyblock-extension/README.md#업데이트-방법",
   "store_url": "",
   "files_url": "https://raw.githubusercontent.com/toy80318-sys/blog-assets/main/toyblock-extension/dist/toyblock-extension-files.zip",
-  "files_sha256": "88db33a36e7e7273a408168a43babed30fb566100249439c2246b69cce9bd081",
-  "files_size": 204767
+  "files_sha256": "280b9c761d93b85d3588e2f64b61df9c7f280973342bda657989effe048731c0",
+  "files_size": 207274
 }

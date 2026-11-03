@@ -1039,7 +1039,7 @@ const BUDDY_DAY_MAX = 50;      // 하루에 여는 이웃 추가 창 수
 const BUDDY_AGAIN_DAYS = 30;   // 한 번 신청 창을 연 블로그는 이 기간 동안 다시 열지 않음
 // 천천히 소통: 1시간 동안 목표 개수만큼, 등록할 때마다 정한 쉬는 시간을 두고 다음 글을 엽니다(등록은 사용자가 직접)
 const PACE_TARGETS = [8, 10, 12, 15, 20];
-const PACE_RESTS = [60, 90, 120, 180, 240];   // 초
+const PACE_REST_MIN = 60e3, PACE_REST_MAX = 90e3;   // 등록 뒤 쉬는 시간: 1분~1분 30초 사이(글마다 다르게)
 const PACE_HOUR = 60 * 60e3;
 const PACE_ALARM = 'nbx-pace';
 const dayKey = (t = Date.now()) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -1048,7 +1048,7 @@ async function getQueue() { const r = await chrome.storage.session.get('nbxQueue
 function viewOf(q) {
   if (!q) return { state: 'none' };
   const v = { state: q.state, i: q.i, total: q.items.length, done: q.done, skipped: q.skipped, dead: q.dead || 0, relation: q.relation, note: q.note || '', buddy: q.buddy, at: Date.now() };
-  if (q.pace) v.pace = { target: q.pace.target, restSec: Math.round(q.pace.restMs / 1000), startAt: q.pace.startAt, endAt: q.pace.endAt, rest: q.rest ? { until: q.rest.until, ms: q.rest.ms } : null };
+  if (q.pace) v.pace = { target: q.pace.target, restMin: Math.round(PACE_REST_MIN / 1000), restMax: Math.round(PACE_REST_MAX / 1000), startAt: q.pace.startAt, endAt: q.pace.endAt, rest: q.rest ? { until: q.rest.until, ms: q.rest.ms } : null };
   return v;
 }
 async function setQueue(q) {
@@ -1084,8 +1084,7 @@ function queueStart(msg, sender) {
     const q = { id: Date.now(), items, i: 0, done: 0, skipped: 0, dead: 0, relation, buddy: relation === 'other' && s.cmt.buddyAuto, state: 'run', note: '', tabId: null };
     if (msg.pace) {
       const target = PACE_TARGETS.includes(Number(msg.pace.target)) ? Number(msg.pace.target) : 12;
-      const rest = PACE_RESTS.includes(Number(msg.pace.rest)) ? Number(msg.pace.rest) : 120;
-      q.pace = { target, restMs: rest * 1000, startAt: Date.now(), endAt: Date.now() + PACE_HOUR };
+      q.pace = { target, startAt: Date.now(), endAt: Date.now() + PACE_HOUR };
       chrome.alarms.clear(PACE_ALARM).catch(() => {});
     }
     if (!(await nextAlive(q))) return { ok: false, error: 'all-deleted', dead: q.dead };
@@ -1170,7 +1169,8 @@ function paceRest(tabId, key) {
     if (!it || postKeyOf(it.blogId, it.logNo) !== key) return { ok: false };
     const now = Date.now();
     if (q.done + 1 >= q.pace.target || now >= q.pace.endAt || q.i + 1 >= q.items.length) { setTimeout(() => queueAdvance('posted', tabId, key), 1500); return { ok: true, last: true }; }
-    const ms = Math.min(q.pace.restMs, Math.max(0, q.pace.endAt - now));
+    const pick = PACE_REST_MIN + Math.round(Math.random() * (PACE_REST_MAX - PACE_REST_MIN) / 1000) * 1000;
+    const ms = Math.min(pick, Math.max(0, q.pace.endAt - now));
     q.rest = { until: now + ms, ms, key, tabId };
     await setQueue(q);
     chrome.alarms.create(PACE_ALARM, { when: q.rest.until });

@@ -771,9 +771,9 @@
   }
   // 천천히 소통 설정(1시간 목표 개수 · 등록 뒤 쉬는 시간) — 이 브라우저에 기억
   const PACE_KEY = 'nbxPace';
-  const PACE_TARGETS = [8, 10, 12, 15, 20], PACE_RESTS = [[60, '1분'], [90, '1분 30초'], [120, '2분'], [180, '3분'], [240, '4분']];
-  const pace = { mode: 'fast', target: 12, rest: 120 };
-  chrome.storage.local.get(PACE_KEY).then((r) => { const p = r && r[PACE_KEY]; if (p) { if (p.mode === 'slow' || p.mode === 'fast') pace.mode = p.mode; if (PACE_TARGETS.includes(p.target)) pace.target = p.target; if (PACE_RESTS.some((x) => x[0] === p.rest)) pace.rest = p.rest; if (S.open && S.tab === 'cmt') render(); } }).catch(() => {});
+  const PACE_TARGETS = [8, 10, 12, 15, 20], REST_LABEL = '1분~1분 30초';
+  const pace = { mode: 'fast', target: 12 };
+  chrome.storage.local.get(PACE_KEY).then((r) => { const p = r && r[PACE_KEY]; if (p) { if (p.mode === 'slow' || p.mode === 'fast') pace.mode = p.mode; if (PACE_TARGETS.includes(p.target)) pace.target = p.target; if (S.open && S.tab === 'cmt') render(); } }).catch(() => {});
   const savePace = () => chrome.storage.local.set({ [PACE_KEY]: { ...pace } }).catch(() => {});
   let paceTimer = null;
   function paceTick() {
@@ -789,7 +789,7 @@
         const left = Math.max(0, Math.ceil((v.pace.endAt - Date.now()) / 60e3));
         const head = v.state === 'paused' ? '<b>잠시 쉬는 중</b>' : `🐢 천천히 소통 <b>${Math.min(v.done, v.pace.target)}/${v.pace.target}</b> · 남은 시간 ${left}분`;
         if (v.pace.rest && !paceTimer) setTimeout(() => { paceTick(); paceTimer = setInterval(paceTick, 1000); }, 0);
-        return `<div class="qbox on"><div>${head}</div>${v.pace.rest ? '<div class="qn">쉬는 중 · 다음 글까지 <b class="pcd"></b> · 댓글 창에서 팁을 볼 수 있어요</div>' : `<div class="qn">등록 ${v.done} · 건너뜀 ${v.skipped} · 등록할 때마다 ${Math.round(v.pace.restSec / 60 * 10) / 10}분씩 쉬어 가요</div>`}${v.note ? `<div class="qn">${esc(v.note)}</div>` : ''}
+        return `<div class="qbox on"><div>${head}</div>${v.pace.rest ? '<div class="qn">쉬는 중 · 다음 글까지 <b class="pcd"></b> · 댓글 창에서 팁을 볼 수 있어요</div>' : `<div class="qn">등록 ${v.done} · 건너뜀 ${v.skipped} · 등록할 때마다 ${REST_LABEL} 쉬어 가요</div>`}${v.note ? `<div class="qn">${esc(v.note)}</div>` : ''}
           <div class="qa">${v.state === 'paused' ? '<button class="btn primary" data-act="queueResume">이어 하기</button>' : ''}<button class="btn ghost" data-act="queueStop">멈추기</button></div></div>`;
       }
       const head = v.state === 'run' ? `연속 소통 <b>${Math.min(v.i + 1, v.total)}/${v.total}</b> 진행 중` : '<b>잠시 쉬는 중</b>';
@@ -805,9 +805,9 @@
       const tip = globalThis.NBXTIPS ? NBXTIPS.LIST[Math.floor(Date.now() / 60e3) % NBXTIPS.LIST.length] : null;
       return `<div class="qbox">${tabs}
         <div class="prow"><label>1시간 목표 <select data-act="paceTarget">${PACE_TARGETS.map((x) => `<option value="${x}" ${x === pace.target ? 'selected' : ''}>${x}개</option>`).join('')}</select></label>
-        <label>등록 뒤 쉬기 <select data-act="paceRest">${PACE_RESTS.map(([x, l]) => `<option value="${x}" ${x === pace.rest ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
+        <span class="prest">등록 뒤 쉬기 <b>${REST_LABEL}</b></span></div>
         <button class="btn primary" data-act="queueStart">🐢 천천히 소통 시작 · 1시간 · 목표 ${Math.min(pace.target, n)}개</button>
-        <div class="qn">글을 하나씩 열어 댓글을 채워 두면, 읽고 직접 등록해 주세요. 등록하면 ${PACE_RESTS.find((x) => x[0] === pace.rest)[1]} 동안 주의사항·팁을 보여 주며 쉬었다가 다음 글을 열어요. 목표를 채우거나 1시간이 지나면 멈춰요.${n < pace.target ? ` 지금 목록에는 글이 ${n}개라 목록이 끝나면 마쳐요.` : ''}</div>
+        <div class="qn">글을 하나씩 열어 댓글을 채워 두면, 읽고 직접 등록해 주세요. 등록하면 ${REST_LABEL} 사이로 주의사항·팁을 보여 주며 쉬었다가 다음 글을 열어요. 목표를 채우거나 1시간이 지나면 멈춰요.${n < pace.target ? ` 지금 목록에는 글이 ${n}개라 목록이 끝나면 마쳐요.` : ''}</div>
         ${buddyChk}
         ${tip ? `<div class="ptip"><b>${esc(tip.label)}</b> ${esc(tip.text)}</div>` : ''}</div>`;
     }
@@ -983,7 +983,7 @@
     else if (act === 'queueStart') {
       const C = S.cmt;
       const items = queueTargets().map((it) => ({ blogId: it.blogId, logNo: it.logNo, title: it.title, nick: it.nick }));
-      chrome.runtime.sendMessage({ type: 'nbx-cmt-queue-start', items, relation: C.mode === 'search' ? 'other' : 'buddy', pace: pace.mode === 'slow' ? { target: pace.target, rest: pace.rest } : null })
+      chrome.runtime.sendMessage({ type: 'nbx-cmt-queue-start', items, relation: C.mode === 'search' ? 'other' : 'buddy', pace: pace.mode === 'slow' ? { target: pace.target } : null })
         .then((r) => {
           if (r && r.error === 'all-deleted') { const ks = new Set(items.map((x) => keyOf(x))); (C.mode === 'search' ? C.search.items : C.buddy.items).forEach((it) => { if (ks.has(keyOf(it))) it.dead = true; }); flash('남은 글이 모두 삭제된 글이에요.'); render(); }
           else if (!r || !r.ok) flash('연속 소통을 시작하지 못했어요.');
@@ -1017,7 +1017,6 @@
   root.addEventListener('change', (e) => {
     const a = e.target.dataset && e.target.dataset.act;
     if (a === 'paceTarget' && PACE_TARGETS.includes(Number(e.target.value))) { pace.target = Number(e.target.value); savePace(); render(); }
-    else if (a === 'paceRest' && PACE_RESTS.some((x) => x[0] === Number(e.target.value))) { pace.rest = Number(e.target.value); savePace(); render(); }
   });
   root.addEventListener('compositionstart', () => { S.composing = true; });
   root.addEventListener('compositionend', () => { S.composing = false; if (S.renderLater) { S.renderLater = false; setTimeout(render, 0); } });
@@ -1254,7 +1253,7 @@ details.byp[open]>summary .car{transform:rotate(180deg)}
 .m-serious{background:#eef1f4;color:#334155}.m-dark{background:#ece9f6;color:#5b4b8a}.m-info{background:#e9f8ef;color:#027a38}.bsc{color:#6b7280;background:#f0f2f5}.bsc.hi{color:#027a38;background:#e9f8ef}
 .recbar{display:flex;justify-content:space-between;align-items:flex-start;gap:6px;font-size:11.5px;color:#5b6470;margin:0 0 6px}.recbar b{color:#027a38}.recbar i{font-style:normal;color:#8a94a3}.recbar .lnk{flex:none}
 .kwsug{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:-2px 0 8px;font-size:11.5px;color:#6b7280}.kwsug button{border:1px solid #cfe9da;background:#f2fbf6;color:#027a38;border-radius:99px;padding:2px 9px;font:inherit;font-size:11.5px;font-weight:700;cursor:pointer}.kwsug button.on{background:#03a94d;color:#fff;border-color:#03a94d}
-.qseg{margin:0 0 7px}.prow{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 7px;font-size:12px;color:#3d4550}.prow label{display:flex;align-items:center;gap:4px}.prow select{font:inherit;font-size:12px;border:1px solid #cfd4da;border-radius:7px;padding:3px 4px;background:#fff}
+.qseg{margin:0 0 7px}.prow{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 7px;font-size:12px;color:#3d4550}.prow label{display:flex;align-items:center;gap:4px}.prow .prest b{color:#027a38}.prow select{font:inherit;font-size:12px;border:1px solid #cfd4da;border-radius:7px;padding:3px 4px;background:#fff}
 .ptip{margin-top:7px;background:#f7f9fa;border-radius:9px;padding:7px 9px;font-size:11.5px;line-height:1.55;color:#3d4550}.ptip b{color:#027a38;margin-right:3px}
 .qchk{display:flex!important;gap:5px;align-items:flex-start;cursor:pointer}.qchk input{margin:1px 0 0}.skipnote{display:block;margin:2px 0 8px;font-size:11.5px}
 .flash{position:absolute;left:0;top:44px;width:300px;background:#333;color:#fff;border-radius:10px;padding:9px 12px;font-size:12px;box-shadow:0 6px 16px rgba(0,0,0,.2)}
