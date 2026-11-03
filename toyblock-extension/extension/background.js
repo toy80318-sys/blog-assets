@@ -472,7 +472,7 @@ async function pickOpenRouterModel() {
   } catch (_) { return 'openrouter/free'; }
 }
 async function aiDrafts(provider, apiKey, model, post, cmt) {
-  const p = NBXC.buildPrompt(post, { callName: cmt.callName, style: cmt.style, length: cmt.length, avoid: cmt.avoid });
+  const p = NBXC.buildPrompt(post, { callName: cmt.callName, style: cmt.style, length: cmt.length, avoid: cmt.avoid, mood: cmt.mood });
   const text = await callAI(provider, apiKey, model, p.system, p.user);
   const list = NBXC.parseDrafts(text);
   if (!list.length) throw new Error('응답에서 댓글을 찾지 못했어요');
@@ -520,10 +520,7 @@ const decodeEnt = (s) => String(s || '').replace(/&#(\d{1,8});/g, (_, n) => safe
 const stripTags = (h) => decodeEnt(String(h || '').replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h[1-6]|tr)>/gi, '\n').replace(/<\/?(p|div|li|ul|ol|h[1-6]|tr|td|th|table|section|article|img)\b[^>]*>/gi, ' ').replace(/<[^>]+>/g, '')).replace(/[ \t ]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim();
 
 // 다음 글 미리 읽기: 글 화면(PostView)을 받아 제목·닉네임·본문만 대략 뽑습니다
-async function fetchPostLite(blogId, logNo) {
-  const r = await fetch(`https://blog.naver.com/PostView.naver?blogId=${encodeURIComponent(blogId)}&logNo=${logNo}&redirect=Dlog&widgetTypeCall=true&directAccess=false`, { credentials: 'include', cache: 'no-store' });
-  if (!r.ok) return null;
-  const html = await r.text();
+function parsePostHtml(html, blogId, logNo) {
   const meta = (prop) => { const m = html.match(new RegExp(`<meta[^>]+property=["']${prop}["'][^>]+content=(?:"([^"]*)"|'([^']*)')`, 'i')); return m ? decodeEnt(m[1] != null ? m[1] : m[2]) : ''; };
   const i = html.indexOf('se-main-container');
   const region = i >= 0 ? html.slice(i, i + 80000) : '';
@@ -532,6 +529,12 @@ async function fetchPostLite(blogId, logNo) {
   let m;
   while ((m = sre.exec(region)) && sections.length < 8) { const t = stripTags(m[1]); if (t) sections.push(t); }
   return sanitizePost({ blogId, logNo, title: meta('og:title'), nick: meta('naverblog:nickname'), sections, body: stripTags(region).slice(0, 5000) });
+}
+async function fetchPostLite(blogId, logNo) {
+  const r = await fetch(`https://blog.naver.com/PostView.naver?blogId=${encodeURIComponent(blogId)}&logNo=${logNo}&redirect=Dlog&widgetTypeCall=true&directAccess=false`, { credentials: 'include', cache: 'no-store' });
+  if (!r.ok) return null;
+  const html = await r.text();
+  return parsePostHtml(html, blogId, logNo);
 }
 // ── 삭제·비공개 글 거르기: 글 화면을 한 번 읽어, 지워졌거나 볼 수 없는 글이면 30일 동안 기억하고 추천·열기에서 뺍니다
 // 확인하지 못했을 때(네트워크 오류 등)는 그대로 둡니다 — 확실히 지워진 글만 뺍니다
@@ -566,6 +569,7 @@ async function postAlive(blogId, logNo) {
     else if (r.ok) {
       const html = await r.text();
       if (!POST_BODY_RE.test(html) && DEAD_RE.test(stripTags(html).slice(0, 20000))) ok = false;
+      else if (POST_BODY_RE.test(html)) { try { const post = parsePostHtml(html, blogId, String(logNo)); if (post.title || post.body) { aliveMem.set(key, { ok: true, at: Date.now(), post }); return true; } } catch (_) {} }
     }
   } catch (_) { ok = true; }
   aliveMem.set(key, { ok, at: Date.now() });
@@ -578,9 +582,51 @@ async function aliveCheck(items) {
   const list = (Array.isArray(items) ? items : []).filter((x) => x && ID_RE.test(x.blogId || '') && NO_RE.test(String(x.logNo || ''))).slice(0, 60);
   const dead = [];
   let i = 0;
-  const worker = async () => { while (i < list.length) { const x = list[i++]; if (!(await postAlive(x.blogId, String(x.logNo)))) dead.push(postKeyOf(x.blogId, x.logNo)); } };
+  const moods = {};
+  const s = await getSettings();
+  const worker = async () => {
+    while (i < list.length) {
+      const x = list[i++];
+      const key = postKeyOf(x.blogId, x.logNo);
+      if (!(await postAlive(x.blogId, String(x.logNo)))) { dead.push(key); continue; }
+      // 글을 읽었으면 분위기를 나누고, 그 분위기에 맞는 템플릿 댓글을 미리 만들어 둡니다(열면 바로 씀)
+      const c = aliveMem.get(key);
+      if (c && c.post) {
+        const post = { ...c.post, nick: c.post.nick || cleanStr(x.nick, 30), title: c.post.title || cleanStr(x.title, 150) };
+        const mood = NBXC.classify(post);
+        let first = '';
+        try {
+          const drafts = NBXC.compose(post, { callName: s.cmt.callName, relation: x.relation === 'buddy' ? 'buddy' : 'other', length: s.cmt.length, mood }, await usedTemplates(post.blogId));
+          await putPrepared(key, { mood, drafts, sig: sigOf(s.cmt, 'template') });
+          first = drafts[0] ? drafts[0].text : '';
+        } catch (_) {}
+        moods[key] = { tone: mood.tone, sub: mood.sub || '', label: mood.label, first };
+      }
+    }
+  };
   await Promise.all([worker(), worker(), worker(), worker()]);
-  return { ok: true, dead };
+  return { ok: true, dead, moods };
+}
+// 미리 준비한 댓글(세션에만, 최근 60개)
+async function readPrepared() { const r = await chrome.storage.session.get('nbxPrepared').catch(() => ({})); return (r && r.nbxPrepared) || {}; }
+function putPrepared(key, v) {
+  return serial(async () => {
+    const P = await readPrepared();
+    P[key] = { ...v, at: Date.now() };
+    const ks = Object.keys(P).sort((a, b) => P[a].at - P[b].at);
+    while (ks.length > 60) delete P[ks.shift()];
+    await chrome.storage.session.set({ nbxPrepared: P }).catch(() => {});
+  });
+}
+function takePrepared(key) {
+  return serial(async () => {
+    const P = await readPrepared();
+    const e = P[key];
+    if (!e) return null;
+    delete P[key];
+    await chrome.storage.session.set({ nbxPrepared: P }).catch(() => {});
+    return Date.now() - e.at < 3 * 3600e3 ? e : null;
+  });
 }
 
 async function prefetch(next) {
@@ -598,7 +644,7 @@ async function prefetch(next) {
     if (!post || (!post.body && !post.title)) return;
     post.title = post.title || cleanStr(next.title, 150);
     post.nick = post.nick || cleanStr(next.nick, 30);
-    const drafts = await aiDrafts(prov, apiKey, NBX.modelOf(s.cmt, prov), post, { ...s.cmt, relation: next.relation });
+    const drafts = await aiDrafts(prov, apiKey, NBX.modelOf(s.cmt, prov), post, { ...s.cmt, relation: next.relation, mood: NBXC.classify(post) });
     await putCache(key, sigOf(s.cmt, prov), drafts);
   } catch (_) { /* 미리 만들기는 실패해도 됩니다 — 글을 열 때 다시 만듭니다 */ }
   finally { if (next) prefetching.delete(postKeyOf(next.blogId, next.logNo)); }
@@ -612,6 +658,9 @@ async function cmtGenerate(msg) {
   const key = postKeyOf(post.blogId, post.logNo);
   const want = msg.mode === 'template' ? 'template' : c.provider;
   let drafts = [], provider = 'template', note = '';
+  // 글 분위기: 지금 연 글의 내용으로 다시 나눕니다(목록에서 미리 나눈 결과보다 정확)
+  const mood = NBXC.classify(post);
+  const prepared = key ? await takePrepared(key) : null;
   if (want !== 'template') {
     const info = NBX.AI_PROVIDERS[want];
     const apiKey = (await getKeys())[want];
@@ -620,7 +669,7 @@ async function cmtGenerate(msg) {
       const cached = msg.regen ? null : await takeCache(key, sigOf(c, want));
       if (cached) { drafts = cached; provider = want; }
       else {
-        try { drafts = await aiDrafts(want, apiKey, NBX.modelOf(c, want), post, { ...c, relation: msg.relation, avoid: (await recentTops()).slice(-3).map((x) => x.t) }); provider = want; }
+        try { drafts = await aiDrafts(want, apiKey, NBX.modelOf(c, want), post, { ...c, relation: msg.relation, mood, avoid: (await recentTops()).slice(-3).map((x) => x.t) }); provider = want; }
         catch (e) { note = `${info.label} 연결에 실패해 템플릿으로 만들었어요. (${cleanStr(String(e && e.message || e), 120)})`; }
       }
     }
@@ -628,8 +677,13 @@ async function cmtGenerate(msg) {
   const used = await usedTemplates(post.blogId);
   const tops = await recentTops();
   used.recent = [...(used.recent || []), ...tops.map((x) => x.id).filter(Boolean)];
+  let fromPrepared = false;
+  if (!drafts.length && !msg.regen && prepared && prepared.sig === sigOf(c, 'template') && prepared.mood && prepared.mood.tone === mood.tone && Array.isArray(prepared.drafts) && prepared.drafts.length === 3) {
+    drafts = prepared.drafts.map((d) => ({ ...d })); fromPrepared = true;
+    await rememberTemplates(post.blogId, drafts);
+  }
   if (drafts.length < 3) {
-    const extra = NBXC.compose(post, { callName: c.callName, relation: msg.relation, length: c.length }, used).slice(0, 3 - drafts.length);
+    const extra = NBXC.compose(post, { callName: c.callName, relation: msg.relation, length: c.length, mood }, used).slice(0, 3 - drafts.length);
     drafts = drafts.concat(extra);
     if (provider === 'template') drafts = drafts.slice(0, 3);
     await rememberTemplates(post.blogId, extra);
@@ -641,7 +695,7 @@ async function cmtGenerate(msg) {
     else if (provider !== 'template') drafts = [...drafts.slice(1), drafts[0]]; // AI 초안은 그대로 두고 순서만 돌림
     else {
       for (let k = 0; k < 4; k++) {
-        const alt = NBXC.compose(post, { callName: c.callName, relation: msg.relation, length: c.length }, used).find((d) => !sameAsRecent(d, post.nick, tops));
+        const alt = NBXC.compose(post, { callName: c.callName, relation: msg.relation, length: c.length, mood }, used).find((d) => !sameAsRecent(d, post.nick, tops));
         if (alt) { drafts = [alt, ...drafts.slice(0, 2)]; break; }
       }
     }
@@ -649,7 +703,7 @@ async function cmtGenerate(msg) {
   if (drafts.length) await rememberTop(drafts[0], post.nick);
   const copied = msg.copy === true ? await copyText(drafts[0].text) : false;
   if (key) await logMark(key, 'g');
-  return { ok: true, drafts, provider, providerLabel: provider === 'template' ? '템플릿' : NBX.AI_PROVIDERS[provider].label, note, copied, stats: statsOf(await readLog()) };
+  return { ok: true, drafts, provider, providerLabel: provider === 'template' ? '템플릿' : NBX.AI_PROVIDERS[provider].label, note, copied, stats: statsOf(await readLog()), mood: { tone: mood.tone, sub: mood.sub || '', label: mood.label }, prepared: fromPrepared };
 }
 
 async function openForComment(msg, sender) {

@@ -676,13 +676,14 @@
   }
   // 지워졌거나 볼 수 없는 글은 목록·연속 소통에서 뺍니다(확장이 글 화면을 한 번 읽어 확인, 30일 기억)
   async function checkAlive(list) {
-    const items = list.filter((it) => !it.dead && !it.official).map((it) => ({ blogId: it.blogId, logNo: it.logNo }));
+    const items = list.filter((it) => !it.dead && !it.official).map((it) => ({ blogId: it.blogId, logNo: it.logNo, nick: it.nick, title: it.title, relation: S.cmt.mode === 'buddy' ? 'buddy' : 'other' }));
     if (!items.length) return;
     S.cmt.checking = (S.cmt.checking || 0) + 1;
     const r = await chrome.runtime.sendMessage({ type: 'nbx-cmt-alive', items }).catch(() => null);
     S.cmt.checking--;
     const dead = new Set((r && r.dead) || []);
-    list.forEach((it) => { if (dead.has(keyOf(it))) it.dead = true; });
+    const moods = (r && r.moods) || {};
+    list.forEach((it) => { if (dead.has(keyOf(it))) it.dead = true; if (moods[keyOf(it)]) it.mood = moods[keyOf(it)]; });
     if (S.tab === 'cmt') render();
   }
   function openItem(list, i, relation) {
@@ -725,8 +726,10 @@
         + (src === 'search' && !why ? (S.cmt.nbRes[String(it.blogId).toLowerCase()] ? `<span class="cs done">${NBRES[S.cmt.nbRes[String(it.blogId).toLowerCase()]] || '신청함'}</span>`
           : `<button class="hb nb" data-act="nbOpen" data-src="${src}" data-i="${i}" title="이 블로그에 서로이웃 신청(창에서 메시지를 채워 신청까지 진행)">＋서로이웃</button>`) : '');
       const sc = src === 'search' ? scoreOf(it) : null;
-      const badge = src === 'search' ? (isTop(it) ? `<span class="rk" title="이 키워드 검색 ${it.rank}번째 글">상위 ${it.rank}위</span>` : '')
-        + (sc >= 0 ? `<span class="bsc ${sc >= REC_MIN ? 'hi' : ''}" title="공개 정보로 계산한 블로그 점수(검색 노출 제외)">${sc}점</span>` : '') : '';
+      const MOODCHIP = { info: '정보', serious: '진중', interesting: '흥미', fun: '재미', warm: '따뜻', dark: '조심' };
+      const md = it.mood && !why ? `<span class="mood m-${esc(it.mood.sub === 'celebrate' ? 'celebrate' : it.mood.tone)}" title="${esc(it.mood.label)} · 미리 준비한 댓글: ${esc(it.mood.first || '')}">${esc(it.mood.sub === 'celebrate' ? '축하' : MOODCHIP[it.mood.tone] || '')}</span>` : '';
+      const badge = md + (src === 'search' ? (isTop(it) ? `<span class="rk" title="이 키워드 검색 ${it.rank}번째 글">상위 ${it.rank}위</span>` : '')
+        + (sc >= 0 ? `<span class="bsc ${sc >= REC_MIN ? 'hi' : ''}" title="공개 정보로 계산한 블로그 점수(검색 노출 제외)">${sc}점</span>` : '') : '');
       return `<li class="ci ${mk.p || why ? 'dim' : ''}" data-act="cmtOpen" data-src="${src}" data-i="${i}" title="새 탭에서 글을 열고 댓글창으로 이동해 댓글을 복사합니다">
         <div class="ct">${esc(it.title || '(제목 없음)')}</div>${badge ? `<div class="cb">${badge}</div>` : ''}<div class="cm"><a class="home" href="https://blog.naver.com/${esc(it.blogId)}" target="_blank" rel="noopener" title="${esc(who)} 블로그로 가기">${esc(who)} ↗</a>${it.at ? `<span>· ${esc(ago(it.at))}</span>` : ''}${st}${tool}<b class="go">💬</b></div></li>`;
     }).join('')}</ol>` : '';
@@ -1170,7 +1173,10 @@ details.byp[open]>summary .car{transform:rotate(180deg)}
 .qbox{margin:0 0 8px}.qbox.on{border:1.5px solid #03a94d;background:#f2fbf6;border-radius:10px;padding:8px 10px;font-size:12px}
 .qbox .qn{display:block;font-size:11px;color:#6b7280;margin-top:4px;line-height:1.45}.qbox .qa{display:flex;gap:6px;margin-top:6px}.qbox .qa .btn{margin:0;flex:1}
 .cb{display:flex;gap:4px;margin:2px 0 1px}.rk,.bsc{font-size:10.5px;font-weight:800;border-radius:6px;padding:0 5px;line-height:17px;white-space:nowrap}
-.rk{color:#1d4ed8;background:#eaf1ff}.bsc{color:#6b7280;background:#f0f2f5}.bsc.hi{color:#027a38;background:#e9f8ef}
+.rk{color:#1d4ed8;background:#eaf1ff}
+.mood{font-size:10.5px;font-weight:800;border-radius:6px;padding:0 5px;line-height:17px;white-space:nowrap;cursor:help;background:#f0f2f5;color:#5b6470}
+.m-fun{background:#fff4d6;color:#a16207}.m-interesting{background:#eef2ff;color:#4338ca}.m-warm{background:#fdecef;color:#be185d}.m-celebrate{background:#fde8f3;color:#c026d3}
+.m-serious{background:#eef1f4;color:#334155}.m-dark{background:#ece9f6;color:#5b4b8a}.m-info{background:#e9f8ef;color:#027a38}.bsc{color:#6b7280;background:#f0f2f5}.bsc.hi{color:#027a38;background:#e9f8ef}
 .recbar{display:flex;justify-content:space-between;align-items:flex-start;gap:6px;font-size:11.5px;color:#5b6470;margin:0 0 6px}.recbar b{color:#027a38}.recbar i{font-style:normal;color:#8a94a3}.recbar .lnk{flex:none}
 .qchk{display:flex!important;gap:5px;align-items:flex-start;cursor:pointer}.qchk input{margin:1px 0 0}.skipnote{display:block;margin:2px 0 8px;font-size:11.5px}
 .flash{position:absolute;left:0;top:44px;width:300px;background:#333;color:#fff;border-radius:10px;padding:9px 12px;font-size:12px;box-shadow:0 6px 16px rgba(0,0,0,.2)}

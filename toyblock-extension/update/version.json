@@ -1,12 +1,12 @@
 {
   "name": "토이블록 네이버 블로그 도우미",
-  "version": "1.11.4",
-  "released_at": "2026-11-03T04:16:31Z",
-  "notes": "· 템플릿 댓글 문장을 크게 늘리고 이모티콘(😊 👍 ✨ 🌷 🥰 🙌 등)을 더 자주, 더 다양하게 넣어요\n· 댓글 길이: 설정에서 짧게 · 섞어서(기본) · 길게를 고를 수 있어요. 길게 쓰면 그 글의 소제목을 짚는 문장이 더해져요\n· 맨 위(1번) 추천 댓글이 바로 앞에 만든 1번 댓글과 같지 않게 바꿨어요(AI 댓글도 똑같으면 다른 초안을 1번으로 올림)",
+  "version": "1.12.0",
+  "released_at": "2026-11-03T04:32:10Z",
+  "notes": "· 글 분위기 분석: 목록을 불러오면 글을 미리 읽어 정보·진중·흥미·재미·따뜻·축하·어두운 글로 나누고, 분위기에 맞는 댓글을 미리 준비해 둬요(목록에 분위기 표시, 마우스를 올리면 준비한 댓글)\n· 분위기에 맞는 말투: 어두운 글(투병·이별·부고)은 웃음·이모티콘 없이 위로하는 말로, 축하할 글은 축하 인사로, 진중한 글은 차분하게, 재미있는 글은 밝게\n· 분위기별 칭찬 문장을 새로 더해 댓글 경우의 수를 크게 늘렸어요. AI 댓글도 같은 분위기 안내를 받아요\n· 댓글 문장·이모티콘을 늘리고, 길이(짧게·섞어서·길게)를 고를 수 있어요. 1번 추천 댓글이 연달아 같지 않아요",
   "download_url": "https://github.com/toy80318-sys/blog-assets/raw/main/toyblock-extension/dist/toyblock-naver-blog-helper.zip",
   "guide_url": "https://github.com/toy80318-sys/blog-assets/blob/main/toyblock-extension/README.md#업데이트-방법",
   "store_url": "",
   "files_url": "https://raw.githubusercontent.com/toy80318-sys/blog-assets/main/toyblock-extension/dist/toyblock-extension-files.zip",
-  "files_sha256": "04b9b9998172a1167256fe4569b74ab4820af4ca1a302641aa71c9145ff6d804",
-  "files_size": 165879
+  "files_sha256": "6d0a873d2c739aef57506f29e93072087969df56fe7438212dc1a0984d40e365",
+  "files_size": 174304
 }
