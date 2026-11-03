@@ -41,7 +41,19 @@ async function go() {
   busy = true;
   $('#go').disabled = true; $('#again').disabled = true;
   $('#errBox').hidden = true; $('#waitBox').hidden = false;
-  const r = await chrome.runtime.sendMessage({ type: 'nbx-cmt-rewrite', ...job }).catch((e) => ({ ok: false, error: 'ai', detail: String(e && e.message || e) }));
+  let r = await chrome.runtime.sendMessage({ type: 'nbx-cmt-rewrite', ...job }).catch((e) => ({ ok: false, error: 'ai', detail: String(e && e.message || e) }));
+  // 준비가 끝나면 이 화면에서 직접 AI를 부릅니다(긴 답도 끊기지 않게)
+  if (r && r.ok && r.ready) {
+    try {
+      const apiKey = (await NBXKeys.getAll())[r.provider];
+      if (!apiKey) r = { ...r, ok: false, error: 'no-key', provider: r.providerLabel };
+      else {
+        const text = await NBXAI.callAI(r.provider, apiKey, r.model, r.prompt.system, r.prompt.user, { maxTokens: 8192, timeout: 180e3, temperature: 0.7 });
+        const result = NBXR.parseRewrite(text);
+        r = result ? { ...r, result } : { ...r, ok: false, error: 'parse' };
+      }
+    } catch (e) { r = { ...r, ok: false, error: 'ai', detail: String((e && e.message) || e).slice(0, 200) }; }
+  }
   busy = false;
   $('#waitBox').hidden = true; $('#go').disabled = false; $('#again').disabled = false;
   if (r && r.prompt) prompt = r.prompt;
@@ -52,6 +64,7 @@ async function go() {
     'no-key': `${(r && r.provider) || 'AI'} 키가 없어요. 설정에서 키를 연결하면 바로 고쳐 써요.`,
     parse: 'AI 답을 읽지 못했어요. 다시 눌러 주세요(긴 글은 가끔 답이 잘려요).',
     read: '글을 읽지 못했어요. 로그인 상태와 글이 공개인지 확인해 주세요.',
+    'empty-body': '이 글의 본문을 읽지 못했어요(예전 에디터 글이거나 사진만 있는 글일 수 있어요). 제목만으로 새로 쓰면 원래 내용이 사라질 수 있어 멈췄어요. 아래 버튼으로 지침을 복사해 본문과 함께 AI에 붙여 넣어 주세요.',
     ai: `AI 연결에 실패했어요. ${(r && r.detail) || ''}`
   };
   $('#errText').textContent = E[r && r.error] || E.ai;

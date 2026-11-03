@@ -270,7 +270,8 @@
       const paras = c ? qa('.se-text-paragraph', c).filter((p) => !p.closest('.se-documentTitle, .se-sectionTitle, .se-section-sectionTitle')).map((p) => clean(p.innerText)).filter(Boolean) : [];
       let body = paras.join('\n');
       if (!body && c) body = clean(c.innerText);
-      return { ...ids(), title: title.slice(0, 150), nick: nick.slice(0, 30), blogName: blogName.slice(0, 60), sections, body: body.slice(0, 5000) };
+      const images = c ? qa('img.se-image-resource, .se-image img, .se_mediaImage, #postViewArea img', c).length : undefined;
+      return { ...ids(), title: title.slice(0, 150), nick: nick.slice(0, 30), blogName: blogName.slice(0, 60), sections, body: body.slice(0, 5000), images };
     }
 
     // 댓글창 열기: 이미 열려 있으면 버튼을 누르지 않고(누르면 닫힘), 로그인 안내가 보이면 멈춥니다
@@ -488,6 +489,8 @@
     }
     async function postNow(withBuddy) {
       if (active.posting || active.posted) return;
+      // 방금 네이버 [등록]을 직접 눌렀다면 두 번 올라가지 않게 잠시 기다립니다
+      if (active.lastTrustedSubmitAt && Date.now() - active.lastTrustedSubmitAt < 4000) { toast('방금 등록을 눌렀어요. 잠시 뒤 결과를 확인해 주세요.'); return; }
       if (!inputOf(active.box)) active.box = await openCommentBox(active.post.logNo);
       if (active.box && active.box.login) { active.login = true; toast('댓글을 쓰려면 네이버에 로그인해 주세요.'); return; }
       const input = inputOf(active.box);
@@ -498,13 +501,15 @@
         active.lastFilled = d.text;
       }
       const wrap = (active.box && active.box.wrap) || input.closest('.u_cbox_write_wrap, .u_cbox_write_box, .u_cbox_write, .u_cbox') || document;
-      const btn = first('submit', wrap) || first('submit');
+      let btn = first('submit', wrap) || first('submit');
+      // 누를 버튼은 댓글 상자 안의 '등록' 버튼이어야 합니다(다른 버튼을 잘못 누르지 않게)
+      if (btn && (!/등록/.test(clean(btn.textContent || btn.value || btn.getAttribute('aria-label') || '')) || !btn.closest('.u_cbox, [id^="naverComment"], .u_cbox_write_wrap'))) btn = null;
       if (!btn || !shown(btn)) { markSubmit(); toast('등록 버튼을 찾지 못했어요. 빨간 테두리 버튼을 직접 눌러 주세요.'); return; }
       active.posting = true;
       renderGo();
       setStatus('등록하는 중…');
       btn.click();
-      const gone = await waitFor(() => { const now = findInput(); return !now || !clean(valueOf(now)) ? true : null; }, 6000, 250);
+      const gone = await waitFor(() => { const now = findInput(); return now && !clean(valueOf(now)) ? true : null; }, 6000, 250); // 입력칸이 남아 있고 비워졌을 때만 등록으로 봅니다
       active.posting = false;
       if (!gone) { markSubmit(); setStatus('등록이 확인되지 않았어요. 네이버 안내를 확인하고 [등록]을 직접 눌러 주세요.', 'err'); renderGo(); return; }
       const hold = withBuddy && !!active.job.queue;
@@ -613,8 +618,9 @@
       if (a === 'qskip') { b.disabled = true; const r = await send({ type: 'nbx-cmt-queue-next' }); if (!r || !r.ok) { b.disabled = false; toast('지금은 건너뛸 수 없어요'); } return; }
       if (a === 'qstop') { const r = await send({ type: 'nbx-cmt-queue-stop' }); if (r && r.view) renderQueue(r.view); return; }
       if (a === 'qresume') { await send({ type: 'nbx-cmt-queue-resume' }); return; }
-      if (a === 'post') { await postNow(wantsBuddy()); return; }
-      if (a === 'nb') { if (!active.nb) await openNb(false); return; }
+      // 댓글 등록·서로이웃 신청은 사람이 실제로 누른 클릭일 때만(페이지 스크립트가 누른 클릭은 무시)
+      if (a === 'post') { if (e.isTrusted) await postNow(wantsBuddy()); return; }
+      if (a === 'nb') { if (e.isTrusted && !active.nb) await openNb(false); return; }
       const i = Number(b.dataset.i);
       const d = active.drafts && active.drafts[i];
       if (a === 'copy' && d) {
@@ -659,9 +665,10 @@
         const input = findInput();
         if (!clean(valueOf(input))) return;
         if (active.posting || active.posted) return;
+        active.lastTrustedSubmitAt = Date.now();
         setTimeout(() => {
           const now = findInput();
-          if (now && clean(valueOf(now))) return; // 아직 글이 남아 있으면 등록이 안 된 것으로 봅니다
+          if (!now || clean(valueOf(now))) return; // 아직 글이 남아 있으면 등록이 안 된 것으로 봅니다
           if (!active.posted) onPosted(false);
         }, 1500);
       }, true);

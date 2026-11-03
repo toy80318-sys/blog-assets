@@ -30,6 +30,8 @@
   const NEXT = /^(다음|확인|완료|신청|신청하기|보내기|추가|이웃\s?추가|이웃\s?추가하기|서로\s?이웃\s?신청(하기)?)$/;
   const DONE = /(신청(을|이)?\s*(보냈|완료|되었)|(신청|추가)되었습니다|추가(가)?\s*완료|이웃이\s*되었|이웃으로\s*추가(했|되었))/;
   const ALREADY = /(이미\s*(서로\s?)?이웃|이미\s*(서로\s?이웃\s*)?신청)/;
+  // 하루 한도 초과·차단·오류 안내가 뜨면 더 누르지 않고 멈춥니다
+  const LIMIT = /(한도(를|가)?\s*(초과|넘)|초과(하였|했|되었)|제한되(었|어)|신청할\s*수\s*없|추가할\s*수\s*없|일시적인\s*오류|오류가\s*발생)/;
 
   send({ type: 'nbx-cmt-nb-hello', blogId: blogIdOf() }).then((job) => {
     if (!job || !job.ok) return;
@@ -81,8 +83,8 @@
       if (finished) return;
       finished = true;
       if (root) { root.querySelector('.st').hidden = true; }
-      const T = { mutual: '서로이웃 신청을 보냈어요 ✓ 창이 곧 닫혀요.', follow: '이웃으로 추가했어요 ✓ 창이 곧 닫혀요.', already: '이미 이웃이거나 신청한 블로그예요. 창이 곧 닫혀요.' };
-      setStatus(T[result] || '', 'ok');
+      const T = { mutual: '서로이웃 신청을 보냈어요 ✓ 창이 곧 닫혀요.', follow: '이웃으로 추가했어요 ✓ 창이 곧 닫혀요.', already: '이미 이웃이거나 신청한 블로그예요. 창이 곧 닫혀요.', fail: '네이버 안내(한도·제한·오류)가 떠서 자동 진행을 멈췄어요. 화면 안내를 확인해 주세요.' };
+      setStatus(T[result] || '', result === 'fail' ? 'err' : 'ok');
       send({ type: 'nbx-cmt-nb-done', result });
     }
     // 신청 버튼 후보: 화면에 보이고, [다음]·[확인]·[신청] 같은 글자인 것. 취소·이전·닫기는 고르지 않습니다
@@ -116,11 +118,15 @@
     }
 
     const t0 = Date.now();
+    let limitBase = null;
     function tick() {
       if (finished) return;
       const text = pageText();
       if (DONE.test(text)) { finish(pickedType || job.done || (job.type === 'follow' ? 'follow' : 'mutual')); return; }
       if (ALREADY.test(text)) { finish('already'); return; }
+      // 처음 화면에 있던 안내 문구는 빼고, 누른 뒤 새로 뜬 안내만 봅니다
+      if (limitBase === null) limitBase = LIMIT.test(text);
+      else if (!limitBase && clicked.size && LIMIT.test(text)) { finish('fail'); return; }
       if (!picked) picked = pickRadio();
       if (!filled) { filled = fillMessage(); if (filled) send({ type: 'nbx-cmt-nb-filled', filled, picked }); }
       // 빨간 테두리로 다음에 누를 버튼을 보여 줍니다

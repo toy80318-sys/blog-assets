@@ -1,5 +1,5 @@
 // 토이블록 네이버 블로그 도우미 — 백그라운드
-importScripts('features.js', 'comment-core.js', 'rewrite-core.js', 'keystore.js');
+importScripts('features.js', 'comment-core.js', 'rewrite-core.js', 'keystore.js', 'ai-core.js');
 // 검색 노출 확인: 글 제목으로 네이버 블로그 검색을 한 번 하고, 결과에 나온 글 순서(블로그ID/글번호)만 돌려줍니다.
 const SEARCH_URL = 'https://search.naver.com/search.naver?ssc=tab.blog.all&sm=tab_jum&query=';
 
@@ -81,8 +81,10 @@ async function checkUpdate() {
 // 폴더 설치본 자동 업데이트: 설치 폴더를 한 번 연결해 두었으면, 새 버전이 나왔을 때 업데이트 화면을 뒤쪽 탭으로 열어
 // 폴더 허용이 살아 있는 동안은 누르지 않아도 바로 바꿉니다(허용이 없으면 그 화면은 조용히 닫히고 아이콘의 N만 남음).
 // 글쓰기 화면이 열려 있으면 미루고, 같은 버전은 12시간에 한 번만 시도합니다.
+// 폴더 업데이트 화면이 들어 있는지(웹스토어용 패키지를 폴더로 불러온 경우에는 없음)
+const hasFolderUpdater = () => fetch(chrome.runtime.getURL('selfupdate.js'), { method: 'HEAD' }).then((r) => r.ok).catch(() => false);
 async function autoFolderUpdate(info) {
-  if (!info.available || info.installType !== 'development') return;
+  if (!info.available || info.installType !== 'development' || !(await hasFolderUpdater())) return;
   const r = await chrome.storage.local.get(['nbxFolderLink', 'nbxAutoTried']).catch(() => ({}));
   if (!r.nbxFolderLink || !r.nbxFolderLink.linked) return;
   const t = r.nbxAutoTried;
@@ -163,6 +165,7 @@ async function updateNow() {
     await chrome.storage.local.set({ nbxUpdate: info });
     return { mode: 'store', info };
   }
+  if (!(await hasFolderUpdater())) { await chrome.tabs.create({ url: chrome.runtime.getURL('options.html#move') }); return { mode: 'manual' }; }
   await chrome.tabs.create({ url: chrome.runtime.getURL('update.html?go=1') });
   return { mode: 'folder' };
 }
@@ -383,85 +386,7 @@ async function copyText(text) {
 }
 
 // ── AI 호출 ──
-function aiError(status, msg) {
-  const m = cleanStr(msg, 120);
-  if (/unrestricted/i.test(m)) return '제한이 없는 예전 키라 구글이 막았어요 — AI Studio에서 새 키를 만들어 넣어 주세요';
-  if (/ACCESS_TOKEN_TYPE_UNSUPPORTED/i.test(m)) return '이 키 형식을 받지 않는 경로예요 — 키 앞뒤에 빠진 글자가 없는지 확인하고, 안 되면 AI Studio에서 새 키를 만들어 주세요';
-  if (status === 400 && /api key|api_key|key not valid|invalid.*key/i.test(m)) return 'API 키를 확인해 주세요 (' + m.slice(0, 60) + ')';
-  if (status === 400 && /not scoped to a workspace|anthropic-workspace-id/i.test(m)) return '이 클로드 키는 워크스페이스가 정해지지 않았어요 — 키를 만들 때 워크스페이스(Default)를 골라 다시 만들어 주세요';
-  if (status === 400) return '요청이 거절됐어요' + (m ? ' — ' + m : '');
-  if (status === 402) return '크레딧이 부족해요 — 무료 모델을 쓰거나 크레딧을 충전해 주세요';
-  if (status === 401 || status === 403) return 'API 키를 확인해 주세요' + (m ? ' (' + m.slice(0, 60) + ')' : '');
-  if (status === 404) return '모델 이름을 확인해 주세요';
-  if (status === 429 && /free|per-day|daily/i.test(m)) return '무료 사용 한도(하루 횟수)에 걸렸어요. 내일 다시 쓰거나 다른 AI를 골라 주세요';
-  if (status === 429) return '사용 한도에 걸렸어요. 잠시 후 다시 시도해 주세요';
-  if (status >= 500) return 'AI 서버가 잠시 응답하지 않아요';
-  return 'HTTP ' + status;
-}
-async function postJson(url, headers, body, timeout = AI_TIMEOUT) {
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), timeout);
-  try {
-    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body), signal: ctl.signal, credentials: 'omit', cache: 'no-store' });
-    const j = await r.json().catch(() => null);
-    if (!r.ok) { const e = j && j.error; const err = new Error(aiError(r.status, e && (e.message || e.type))); err.status = r.status; err.raw = String((e && (e.message || e.type)) || ''); throw err; }
-    return j;
-  } catch (e) {
-    if (e && e.name === 'AbortError') throw new Error('응답이 너무 늦어요(20초)');
-    if (e instanceof TypeError) throw new Error('AI 서버에 연결하지 못했어요 — 키가 맞는지 확인하고, 설정의 "연결 확인"을 눌러 AI 주소 접근을 허용해 주세요');
-    throw e;
-  } finally { clearTimeout(timer); }
-}
-async function callAI(provider, apiKey, model, system, user, opt = {}) {
-  const T = opt.timeout || AI_TIMEOUT;
-  if (!NBX.MODEL_RE.test(model || '')) throw new Error('모델 이름을 확인해 주세요');
-  // 생각(추론)을 길게 하는 모델이 답을 쓰기 전에 한도를 다 쓰지 않도록 생각을 짧게 요청하고,
-  // 그 설정을 받지 않는 모델이면 설정을 빼고 한 번 더 보냅니다
-  const retryPlain = (e) => e && e.status === 400 && /thinking|reasoning|unsupported|unknown name|not supported|invalid argument/i.test(e.raw || '');
-  if (provider === 'gemini') {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-    const body = (thinking) => ({
-      systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: 'user', parts: [{ text: user }] }],
-      generationConfig: { temperature: opt.temperature || 0.9, maxOutputTokens: opt.maxTokens || 4096, responseMimeType: 'application/json', ...(thinking ? { thinkingConfig: { thinkingLevel: /lite/i.test(model) ? 'minimal' : 'low' } } : {}) }
-    });
-    let j;
-    try { j = await postJson(url, { 'x-goog-api-key': apiKey }, body(true), T); }
-    catch (e) { if (!retryPlain(e)) throw e; j = await postJson(url, { 'x-goog-api-key': apiKey }, body(false), T); }
-    const c = j && j.candidates && j.candidates[0];
-    const parts = (c && c.content && c.content.parts) || [];
-    const text = parts.filter((p) => !p.thought).map((p) => p.text || '').join('');
-    if (!text && j && j.promptFeedback && j.promptFeedback.blockReason) throw new Error('제미나이가 이 글에 답하지 않았어요');
-    return text;
-  }
-  if (provider === 'claude') {
-    const j = await postJson('https://api.anthropic.com/v1/messages', { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, {
-      model, max_tokens: opt.maxTokens || 1024, system, messages: [{ role: 'user', content: user }]
-    }, T);
-    return ((j && j.content) || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
-  }
-  if (provider === 'openai') {
-    const body = (reason) => ({
-      model, max_completion_tokens: opt.maxTokens || 4000, response_format: { type: 'json_object' }, ...(reason ? { reasoning_effort: 'low' } : {}),
-      messages: [{ role: 'system', content: system }, { role: 'user', content: user }]
-    });
-    const reasoning = /^(gpt-5|o\d)/i.test(model);
-    let j;
-    try { j = await postJson('https://api.openai.com/v1/chat/completions', { Authorization: 'Bearer ' + apiKey }, body(reasoning), T); }
-    catch (e) { if (!reasoning || !retryPlain(e)) throw e; j = await postJson('https://api.openai.com/v1/chat/completions', { Authorization: 'Bearer ' + apiKey }, body(false), T); }
-    return (j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
-  }
-  if (provider === 'openrouter') {
-    // OpenAI와 같은 형식. 무료 모델마다 받는 설정이 달라 JSON 형식 지정 없이 보내고, 생각(<think>) 부분은 지웁니다
-    const j = await postJson('https://openrouter.ai/api/v1/chat/completions', { Authorization: 'Bearer ' + apiKey, 'HTTP-Referer': 'https://github.com/toy80318-sys/blog-assets', 'X-Title': 'ToyBlock Naver Blog Helper' }, {
-      model, max_tokens: opt.maxTokens ? Math.min(opt.maxTokens, 6000) : 1200, temperature: 0.9,
-      messages: [{ role: 'system', content: system }, { role: 'user', content: user }]
-    }, T);
-    const t = (j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
-    return String(t).replace(/<think>[\s\S]*?<\/think>/gi, '');
-  }
-  throw new Error('알 수 없는 AI');
-}
+// AI 호출(aiError · postJson · callAI)은 ai-core.js에 있습니다 — 고쳐 쓰기 화면도 같은 코드를 씁니다
 // OpenRouter 기본 모델: 한국어를 잘 쓰는 무료 모델이 지금 있으면 그것을, 없으면 무료 모델 자동 배정(openrouter/free)
 const OR_PREFER = ['google/gemma-4-31b-it:free', 'qwen/qwen3.8-27b:free', 'google/gemma-3-27b-it:free', 'meta-llama/llama-3.3-70b-instruct:free', 'openrouter/free'];
 async function pickOpenRouterModel() {
@@ -487,7 +412,8 @@ function sanitizePost(p, maxBody = 5000) {
     logNo: NO_RE.test(String(p.logNo || '')) ? String(p.logNo) : '',
     title: cleanStr(p.title, 150), nick: cleanStr(p.nick, 30), blogName: cleanStr(p.blogName, 60),
     sections: Array.isArray(p.sections) ? p.sections.map((x) => cleanStr(x, 80)).filter(Boolean).slice(0, 10) : [],
-    body: typeof p.body === 'string' ? p.body.slice(0, maxBody) : ''
+    body: typeof p.body === 'string' ? p.body.slice(0, maxBody) : '',
+    images: Number.isFinite(p.images) ? Math.max(0, Math.min(999, p.images)) : undefined
   };
 }
 
@@ -523,13 +449,20 @@ const stripTags = (h) => decodeEnt(String(h || '').replace(/<(script|style)\b[\s
 // 다음 글 미리 읽기: 글 화면(PostView)을 받아 제목·닉네임·본문만 대략 뽑습니다
 function parsePostHtml(html, blogId, logNo, maxBody = 5000) {
   const meta = (prop) => { const m = html.match(new RegExp(`<meta[^>]+property=["']${prop}["'][^>]+content=(?:"([^"]*)"|'([^']*)')`, 'i')); return m ? decodeEnt(m[1] != null ? m[1] : m[2]) : ''; };
-  const i = html.indexOf('se-main-container');
-  const region = i >= 0 ? html.slice(i, i + 80000) : '';
+  // 본문 시작: 스마트에디터 ONE(se-main-container) · 3.0(se_component_wrap) · 2.0(postViewArea) · 글 번호 영역 순서로 찾고, 댓글 영역 앞에서 자릅니다
+  let i = -1;
+  for (const mark of ['se-main-container', 'se_component_wrap', 'id="postViewArea"', `id="post-view${logNo}"`]) { i = html.indexOf(mark); if (i >= 0) break; }
+  let region = i >= 0 ? html.slice(i, i + 80000) : '';
+  const cut = region.search(/(id|class)=["'][^"']*(area_comment|naverComment|post_footer_contents|wrap_postcomment|comment_area)/);
+  if (cut > 200) region = region.slice(0, cut);
   const sections = [];
   const sre = /se-sectionTitle[\s\S]{0,600}?se-text-paragraph[^>]*>([\s\S]*?)<\/p>/g;
   let m;
   while ((m = sre.exec(region)) && sections.length < 8) { const t = stripTags(m[1]); if (t) sections.push(t); }
-  return sanitizePost({ blogId, logNo, title: meta('og:title'), nick: meta('naverblog:nickname'), sections, body: stripTags(region).slice(0, maxBody) }, maxBody);
+  const images = (region.match(/se-image-resource|class=["'][^"']*se_mediaImage|<img\b/g) || []).length;
+  const post = sanitizePost({ blogId, logNo, title: meta('og:title'), nick: meta('naverblog:nickname'), sections, body: stripTags(region).slice(0, maxBody) }, maxBody);
+  post.images = images;
+  return post;
 }
 async function fetchPostLite(blogId, logNo) {
   const r = await fetch(`https://blog.naver.com/PostView.naver?blogId=${encodeURIComponent(blogId)}&logNo=${logNo}&redirect=Dlog&widgetTypeCall=true&directAccess=false`, { credentials: 'include', cache: 'no-store' });
@@ -545,26 +478,24 @@ async function rewritePost(msg) {
   const post = parsePostHtml(await r.text(), msg.blogId, String(msg.logNo), 12000);
   if (!post.title && !post.body) return { ok: false, error: 'read' };
   const g = (await chrome.storage.local.get('nbxRewriteGuide').catch(() => ({}))).nbxRewriteGuide;
-  const diag = { status: msg.status === 'warn' ? 'warn' : 'miss', rank: Number(msg.rank) || null, tag: cleanStr(msg.tag, 20) };
+  const diag = { status: msg.status === 'warn' ? 'warn' : 'miss', rank: Number(msg.rank) || null, tag: cleanStr(msg.tag, 20), query: post.title };
   const prompt = NBXR.buildRewrite(post, diag, typeof g === 'string' ? g : '');
   const s = await getSettings();
   const prov = s.cmt.provider;
   const info = { post: { title: post.title, chars: String(post.body || '').replace(/\s/g, '').length, sections: post.sections }, prompt, customGuide: !!(typeof g === 'string' && g.trim()) };
+  if (info.post.chars < 80) return { ok: false, error: 'empty-body', ...info }; // 본문을 거의 읽지 못한 글은 제목만으로 새로 쓰지 않음
   if (msg.promptOnly) return { ok: true, ...info };
   if (prov === 'template') return { ok: false, error: 'no-ai', ...info };
-  const apiKey = (await getKeys())[prov];
-  if (!apiKey) return { ok: false, error: 'no-key', provider: NBX.AI_PROVIDERS[prov].label, ...info };
-  try {
-    const text = await callAI(prov, apiKey, NBX.modelOf(s.cmt, prov), prompt.system, prompt.user, { maxTokens: 8192, timeout: 150e3, temperature: 0.7 });
-    const result = NBXR.parseRewrite(text);
-    if (!result) return { ok: false, error: 'parse', provider: NBX.AI_PROVIDERS[prov].label, ...info };
-    return { ok: true, result, provider: NBX.AI_PROVIDERS[prov].label, ...info };
-  } catch (e) { return { ok: false, error: 'ai', detail: cleanStr(String((e && e.message) || e), 200), provider: NBX.AI_PROVIDERS[prov].label, ...info }; }
+  if (!(await getKeys())[prov]) return { ok: false, error: 'no-key', provider: NBX.AI_PROVIDERS[prov].label, ...info };
+  // AI 호출은 고쳐 쓰기 화면이 직접 합니다(답이 30초 넘게 걸릴 수 있어 서비스 워커에서 부르지 않음)
+  return { ok: true, ready: true, provider: prov, providerLabel: NBX.AI_PROVIDERS[prov].label, model: NBX.modelOf(s.cmt, prov), ...info };
 }
 
 // ── 삭제·비공개 글 거르기: 글 화면을 한 번 읽어, 지워졌거나 볼 수 없는 글이면 30일 동안 기억하고 추천·열기에서 뺍니다
 // 확인하지 못했을 때(네트워크 오류 등)는 그대로 둡니다 — 확실히 지워진 글만 뺍니다
-const DEAD_RE = /(존재하지\s*않는\s*(게시물|게시글|글|포스트|페이지)|삭제되었거나|삭제된\s*(게시물|게시글|글|포스트)|(게시물|게시글|글)이\s*삭제|찾을\s*수\s*없는\s*(게시물|게시글|글|포스트)|비공개\s*(게시물|게시글|글|포스트)|접근\s*권한이\s*없|볼\s*수\s*없는\s*(게시물|게시글|글))/;
+const DEAD_RE = /(존재하지\s*않는\s*(게시물|게시글|글|포스트|페이지)|삭제되었거나|삭제된\s*(게시물|게시글|글|포스트)|(게시물|게시글|글)이\s*삭제|찾을\s*수\s*없는\s*(게시물|게시글|글|포스트))/;
+// 비공개·이웃공개·로그인 필요: 지금은 댓글을 달 수 없지만 나중에(로그인·이웃이 된 뒤) 볼 수 있으니 오래 기억하지 않습니다
+const LOCKED_RE = /(비공개\s*(게시물|게시글|글|포스트)|접근\s*권한이\s*없|볼\s*수\s*없는\s*(게시물|게시글|글)|이웃(만|에게만)\s*공개|서로이웃(만|에게만)\s*공개|로그인이\s*필요)/;
 const POST_BODY_RE = /se-main-container|id=["']postViewArea|id=["']post-view\d|se_component_wrap|__se_component_area/;
 const DEAD_DAYS = 30;
 const aliveMem = new Map();
@@ -595,7 +526,9 @@ async function postAlive(blogId, logNo) {
     if (r.status === 404 || r.status === 410) ok = false;
     else if (r.ok) {
       const html = await r.text();
-      if (!POST_BODY_RE.test(html) && DEAD_RE.test(stripTags(html).slice(0, 20000))) ok = false;
+      const plain = stripTags(html).slice(0, 20000);
+      if (!POST_BODY_RE.test(html) && (DEAD_RE.test(plain) || DEAD_RE.test(html.slice(0, 60000)))) ok = false; // 안내가 alert 스크립트 안에 있어도 알아봄
+      else if (!POST_BODY_RE.test(html) && (LOCKED_RE.test(plain) || LOCKED_RE.test(html.slice(0, 60000)))) { aliveMem.set(key, { ok: false, at: Date.now(), locked: true }); return false; }
       else if (POST_BODY_RE.test(html)) { try { const post = parsePostHtml(html, blogId, String(logNo)); if (post.title || post.body) { aliveMem.set(key, { ok: true, at: Date.now(), post }); return true; } } catch (_) {} }
     }
   } catch (_) { ok = true; }
@@ -657,6 +590,7 @@ function takePrepared(key) {
 }
 
 async function prefetch(next) {
+  let mine = '';
   try {
     if (!next || !ID_RE.test(next.blogId || '') || !NO_RE.test(String(next.logNo || ''))) return;
     const s = await getSettings();
@@ -666,7 +600,7 @@ async function prefetch(next) {
     if (!apiKey) return;
     const key = postKeyOf(next.blogId, next.logNo);
     if ((await readCache())[key] || prefetching.has(key)) return;
-    prefetching.add(key);
+    prefetching.add(key); mine = key; // 이 호출이 표시한 것만 이 호출이 지웁니다
     const post = await fetchPostLite(next.blogId, String(next.logNo));
     if (!post || (!post.body && !post.title)) return;
     post.title = post.title || cleanStr(next.title, 150);
@@ -674,7 +608,7 @@ async function prefetch(next) {
     const drafts = await aiDrafts(prov, apiKey, NBX.modelOf(s.cmt, prov), post, { ...s.cmt, relation: next.relation, mood: NBXC.classify(post) });
     await putCache(key, sigOf(s.cmt, prov), drafts);
   } catch (_) { /* 미리 만들기는 실패해도 됩니다 — 글을 열 때 다시 만듭니다 */ }
-  finally { if (next) prefetching.delete(postKeyOf(next.blogId, next.logNo)); }
+  finally { if (mine) prefetching.delete(mine); }
 }
 const prefetching = new Set();
 
@@ -812,7 +746,9 @@ const validItem = (x) => ID_RE.test(x.blogId || '') && NO_RE.test(x.logNo || '')
 let feedCursor = null;
 async function feedCards(more) {
   if (!more) feedCursor = { pagingParam: null, exposed: [] };
-  if (!feedCursor || (more && !feedCursor.pagingParam)) return { ok: false, error: 'end' };
+  else if (!feedCursor) feedCursor = ((await chrome.storage.session.get('nbxFeedCursor').catch(() => ({}))) || {}).nbxFeedCursor || null;
+  if (!feedCursor) return { ok: false, error: 'nocursor' }; // 이어 받을 자리를 모르면 예전 방식(쪽 번호)으로
+  if (more && !feedCursor.pagingParam) return { ok: false, error: 'end' };
   const body = { feedType: 'TOTAL', exposedContentKeys: feedCursor.exposed.slice(-60) };
   if (feedCursor.pagingParam) body.pagingParam = feedCursor.pagingParam;
   const r = await fetch('https://query.blog.naver.com/mweb/buddy-feed/ab/cards', {
@@ -831,6 +767,8 @@ async function feedCards(more) {
     if (validItem(it)) items.push(it);
   }
   feedCursor.pagingParam = j.result.pagingParam || null;
+  feedCursor.exposed = feedCursor.exposed.slice(-120);
+  await chrome.storage.session.set({ nbxFeedCursor: feedCursor }).catch(() => {});
   return { ok: true, items, more: !!feedCursor.pagingParam };
 }
 // ② 이웃새글 화면이 쓰는 목록(예전 방식)
@@ -848,13 +786,15 @@ const feedTrace = [];
 async function buddyFeed(page) {
   const p = Math.max(1, Math.min(20, parseInt(page, 10) || 1));
   try { await ensureFeedRules(); } catch (e) { feedTrace.push('rules: ' + (e && e.message)); }
-  const tries = p > 1 && feedSource ? [feedSource] : ['cards', 'section'];
+  if (p > 1 && !feedSource) feedSource = ((await chrome.storage.session.get('nbxFeedSource').catch(() => ({}))) || {}).nbxFeedSource || null;
+  const tries = p > 1 && feedSource ? [feedSource, ...(feedSource === 'cards' ? ['section'] : [])] : ['cards', 'section'];
   const errors = [];
   for (const src of tries) {
     try {
       const r = src === 'cards' ? await feedCards(p > 1) : await feedSection(p);
       if (r.ok) {
         feedSource = src;
+        chrome.storage.session.set({ nbxFeedSource: src }).catch(() => {});
         const seen = new Set();
         const items = r.items.filter((x) => { const k = x.blogId.toLowerCase() + '/' + x.logNo; if (seen.has(k)) return false; seen.add(k); return true; })
           .map((x) => ({ ...x, official: NBX.isOfficialBlog(x) })); // 공식 블로그 표시(목록에서는 기본으로 뺌)
@@ -1141,11 +1081,12 @@ function queueStart(msg, sender) {
   });
 }
 // 다음 글로: reason = 'posted'(등록함) | 'skip'(건너뜀)
-function queueAdvance(reason, fromTab) {
+function queueAdvance(reason, fromTab, key) {
   return queued(async () => {
     const q = await getQueue();
     if (!q || q.state !== 'run') return { ok: false, error: 'not-running' };
     if (fromTab != null && fromTab !== q.tabId) return { ok: false, error: 'other-tab' };
+    if (key && (!q.items[q.i] || postKeyOf(q.items[q.i].blogId, q.items[q.i].logNo) !== key)) return { ok: false, error: 'moved' };
     if (reason === 'posted') q.done++; else q.skipped++;
     q.i++;
     if (!(await nextAlive(q))) { q.state = 'done'; q.note = q.dead ? `삭제된 글 ${q.dead}개는 건너뛰었어요.` : ''; return { ok: true, view: await setQueue(q) }; }
@@ -1193,7 +1134,7 @@ async function queueOnPosted(tabId, key, ms = QUEUE_NEXT_MS) {
   if (!q || q.state !== 'run' || q.tabId !== tabId) return { ok: false };
   const it = q.items[q.i];
   if (!it || postKeyOf(it.blogId, it.logNo) !== key) return { ok: false };
-  setTimeout(() => { queueAdvance('posted', tabId); }, ms);
+  setTimeout(() => { queueAdvance('posted', tabId, key); }, ms); // 그사이 건너뛰기로 이미 넘어갔으면 다시 넘기지 않음
   return { ok: true };
 }
 chrome.tabs.onRemoved.addListener(async (tabId) => {
@@ -1231,7 +1172,11 @@ async function buddyCount(blogId) {
   await chrome.storage.local.set({ nbxBuddyLog: L }).catch(() => {});
   return { over, n: L.n };
 }
-async function openBuddy(it, opts = {}) {
+// 이웃 추가 창 기록은 한 줄로 세워 처리합니다(창 둘이 동시에 열려도 서로 덮어쓰지 않고, 창이 먼저 물어봐도 기록이 끝난 뒤에 답함)
+let buddyQ = Promise.resolve();
+const bq = (fn) => { const p = buddyQ.then(fn, fn); buddyQ = p.catch(() => {}); return p; };
+function openBuddy(it, opts = {}) { return bq(() => openBuddyNow(it, opts)); }
+async function openBuddyNow(it, opts = {}) {
   if (!ID_RE.test(it.blogId || '')) return { ok: false, error: 'bad-id' };
   const L = await buddyLog();
   if (L.n >= BUDDY_DAY_MAX) return { ok: false, error: 'day-limit', n: L.n };
@@ -1248,7 +1193,8 @@ async function openBuddy(it, opts = {}) {
 }
 // 이웃 추가 창의 도우미가 처음 묻는 것: 이 창에서 무엇을 할지.
 // 토이블록이 연 창이 아니면(블로그 화면의 이웃추가 버튼을 사용자가 누른 창) 설정이 켜져 있을 때만 같은 방식으로 돕습니다.
-async function buddyHello(sender, msg) {
+function buddyHello(sender, msg) { return bq(() => buddyHelloNow(sender, msg)); }
+async function buddyHelloNow(sender, msg) {
   const tab = sender.tab;
   const tabId = tab && tab.id;
   if (tabId == null || !/^https:\/\/(m\.)?blog\.naver\.com\//.test(sender.url || '')) return { ok: false };
@@ -1258,28 +1204,36 @@ async function buddyHello(sender, msg) {
     const s = await getSettings();
     const blogId = String((msg && msg.blogId) || '');
     if (!s.cmt.buddyOneClick || !ID_RE.test(blogId)) return { ok: false };
-    let nick = '';
+    // 신청까지 저절로 마치는 것은 '그 블로그 화면에서 연 창'(블로그의 이웃추가 버튼)일 때만입니다.
+    // 다른 사이트나 링크가 연 이웃 추가 창은 메시지만 채워 두고, 신청은 사용자가 직접 누릅니다.
+    let nick = '', sameBlog = false;
     if (tab.openerTabId != null) {
-      const who = await chrome.tabs.sendMessage(tab.openerTabId, { type: 'nbx-cmt-whois' }).catch(() => null);
-      if (who && who.blogId && String(who.blogId).toLowerCase() === blogId.toLowerCase()) nick = cleanStr(who.nick, 30);
+      const opener = await chrome.tabs.get(tab.openerTabId).catch(() => null);
+      let openerBlog = '';
+      try { const u = new URL((opener && opener.url) || ''); if (/^(m\.)?blog\.naver\.com$/.test(u.hostname)) openerBlog = u.searchParams.get('blogId') || (u.pathname.match(/^\/([A-Za-z0-9_-]{2,40})(?:\/|$)/) || [])[1] || ''; } catch (_) {}
+      const who = openerBlog ? await chrome.tabs.sendMessage(tab.openerTabId, { type: 'nbx-cmt-whois' }).catch(() => null) : null;
+      if (who && who.blogId && String(who.blogId).toLowerCase() === blogId.toLowerCase()) { nick = cleanStr(who.nick, 30); sameBlog = true; }
+      if (openerBlog && openerBlog.toLowerCase() === blogId.toLowerCase()) sameBlog = true;
     }
-    const c = await buddyCount(blogId);
-    j = { blogId, nick, msg: NBX.buddyMessage(s.cmt.buddyMsg, nick, (n) => NBXC.callable(n)), type: s.cmt.buddyType, at: Date.now(), auto: !c.over, steps: 0, origin: tab.openerTabId == null ? null : tab.openerTabId, native: true, over: c.over };
+    const c = sameBlog ? await buddyCount(blogId) : { over: false };
+    j = { blogId, nick, msg: NBX.buddyMessage(s.cmt.buddyMsg, nick, (n) => NBXC.callable(n)), type: s.cmt.buddyType, at: Date.now(), auto: sameBlog && !c.over, steps: 0, origin: tab.openerTabId == null ? null : tab.openerTabId, native: true, over: c.over };
     jobs[tabId] = j;
     await saveBuddyJobs(jobs);
   }
   return { ok: true, blogId: j.blogId, nick: j.nick, msg: j.msg, type: j.type, auto: !!j.auto && !j.result && !j.stopped, over: !!j.over, result: j.result || '', done: j.picked || '' };
 }
-async function buddyFilled(sender, msg) {
+function buddyFilled(sender, msg) { return bq(() => buddyFilledNow(sender, msg)); }
+async function buddyFilledNow(sender, msg) {
   const tabId = sender.tab && sender.tab.id;
   const jobs = await buddyJobs();
   if (tabId == null || !jobs[tabId]) return { ok: false };
-  jobs[tabId].filled = !!msg.filled; jobs[tabId].picked = !!msg.picked;
+  jobs[tabId].filled = !!msg.filled; jobs[tabId].radio = !!msg.picked; // picked(서로이웃/이웃 결과)와 따로 둡니다
   await saveBuddyJobs(jobs);
   return { ok: true };
 }
 // 확장이 창 안의 버튼(다음·확인 등)을 누르기 전에 묻습니다: 사용자가 누른 창이고, 아직 몇 번 안 눌렀을 때만
-async function buddyStep(sender, msg) {
+function buddyStep(sender, msg) { return bq(() => buddyStepNow(sender, msg)); }
+async function buddyStepNow(sender, msg) {
   const tabId = sender.tab && sender.tab.id;
   const jobs = await buddyJobs();
   const j = tabId == null ? null : jobs[tabId];
@@ -1290,7 +1244,8 @@ async function buddyStep(sender, msg) {
   await saveBuddyJobs(jobs);
   return { ok: true, step: j.steps };
 }
-async function buddyStop(sender) {
+function buddyStop(sender) { return bq(() => buddyStopNow(sender)); }
+async function buddyStopNow(sender) {
   const tabId = sender.tab && sender.tab.id;
   const jobs = await buddyJobs();
   if (tabId == null || !jobs[tabId]) return { ok: false };
@@ -1299,7 +1254,8 @@ async function buddyStop(sender) {
   return { ok: true };
 }
 // 결과: mutual(서로이웃 신청 보냄) · follow(이웃으로 추가) · already(이미 이웃·신청 중) · closed(완료 화면 전에 창이 닫힘) · fail
-async function buddyResult(tabId, result, windowId) {
+function buddyResult(tabId, result, windowId) { return bq(() => buddyResultNow(tabId, result, windowId)); }
+async function buddyResultNow(tabId, result, windowId) {
   const jobs = await buddyJobs();
   const j = jobs[tabId];
   if (!j || j.result) return { ok: false };

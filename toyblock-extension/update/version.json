@@ -1,12 +1,12 @@
 {
   "name": "토이블록 네이버 블로그 도우미",
-  "version": "1.12.2",
-  "released_at": "2026-11-03T05:03:36Z",
-  "notes": "· 누락 글 고쳐 쓰기: 채널 분석의 [글별 결과 보기]에서 누락·주의 글의 [✍ 지침대로 고쳐 쓰기]를 누르면, 그 글을 읽고 글쓰기 지침과 진단에 맞춰 AI가 노출이 낮은 이유 · 새 제목 후보 3개 · 고친 본문(소제목 3~4개) · FAQ 3개 · 바꾼 점을 써 줘요\n· 설정 > 누락 글 고쳐 쓰기에서 내 글쓰기 지침을 붙여 넣을 수 있어요(비우면 네이버 생활 정보 글 기본 지침)\n· AI 키가 없을 때는 [지침 + 원래 글 복사]로 Claude·ChatGPT에 붙여 넣어 쓸 수 있어요\n· 주제별 댓글(16가지 주제)과 글 분위기 분석이 함께 들어 있어요",
+  "version": "1.12.3",
+  "released_at": "2026-11-03T05:28:56Z",
+  "notes": "· 오류 검증 3회(독립 검토·전체 테스트·실사용 글 점검)에서 찾은 문제를 고쳤어요\n· 댓글 분위기 분석이 더 정확해졌어요: 등산·출산·연말 결산·이별 노래·영화/책 리뷰를 어두운 글로 잘못 보지 않고, 불합격·손실 글에는 축하 대신 응원 댓글을, 비추 후기에는 칭찬 대신 차분한 댓글을 준비해요\n· 사진이 없는 글에는 사진 칭찬을 넣지 않고, 핵심어가 어색하게 붙는 일(캠핑에에·떠나보내며 등)을 줄였어요\n· 등록 확인을 더 엄격하게: 댓글창이 비워졌을 때만 등록으로 세고, 네이버 [등록]을 직접 누른 직후 카드 버튼을 또 눌러도 두 번 올라가지 않아요\n· 서로이웃 신청 중 한도 초과·제한 안내가 뜨면 더 누르지 않고 멈춰요. 다른 사이트가 연 이웃 추가 창은 저절로 신청하지 않아요\n· 고쳐 쓰기: 긴 글도 끊기지 않게 고쳐 쓰기 화면에서 바로 AI를 불러요. 예전 에디터 글 본문도 읽어요\n· 비공개·이웃공개 글은 삭제된 글로 오래 숨기지 않아요(6시간만)",
   "download_url": "https://github.com/toy80318-sys/blog-assets/raw/main/toyblock-extension/dist/toyblock-naver-blog-helper.zip",
   "guide_url": "https://github.com/toy80318-sys/blog-assets/blob/main/toyblock-extension/README.md#업데이트-방법",
   "store_url": "",
   "files_url": "https://raw.githubusercontent.com/toy80318-sys/blog-assets/main/toyblock-extension/dist/toyblock-extension-files.zip",
-  "files_sha256": "f0421a153d1aef68fbea534690cd265b236b7634bf050573f806bb28b4f9f944",
-  "files_size": 187597
+  "files_sha256": "96a2323b539f7bb874a6c8b6b629258378e81aba472cc5c070d4ec5a8709b9ed",
+  "files_size": 195598
 }

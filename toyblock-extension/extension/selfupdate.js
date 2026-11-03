@@ -56,7 +56,7 @@
     return {
       version: v.version, notes: typeof v.notes === 'string' ? v.notes.slice(0, 1200) : '',
       filesUrl: FILES_RE.test(v.files_url || '') ? v.files_url : '', filesSha: /^[0-9a-f]{64}$/.test(v.files_sha256 || '') ? v.files_sha256 : '',
-      downloadUrl: typeof v.download_url === 'string' ? v.download_url : ''
+      downloadUrl: /^https:\/\/(github\.com|raw\.githubusercontent\.com)\/toy80318-sys\/blog-assets\//.test(v.download_url || '') ? v.download_url : ''
     };
   }
 
