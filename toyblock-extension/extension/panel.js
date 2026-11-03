@@ -727,7 +727,7 @@
           : `<button class="hb nb" data-act="nbOpen" data-src="${src}" data-i="${i}" title="이 블로그에 서로이웃 신청(창에서 메시지를 채워 신청까지 진행)">＋서로이웃</button>`) : '');
       const sc = src === 'search' ? scoreOf(it) : null;
       const MOODCHIP = { info: '정보', serious: '진중', interesting: '흥미', fun: '재미', warm: '따뜻', dark: '조심' };
-      const md = it.mood && !why ? `<span class="mood m-${esc(it.mood.sub === 'celebrate' ? 'celebrate' : it.mood.tone)}" title="${esc(it.mood.label)} · 미리 준비한 댓글: ${esc(it.mood.first || '')}">${esc(it.mood.sub === 'celebrate' ? '축하' : MOODCHIP[it.mood.tone] || '')}</span>` : '';
+      const md = it.mood && !why ? `<span class="mood m-${esc(it.mood.sub === 'celebrate' ? 'celebrate' : it.mood.tone)}" title="${esc(it.mood.label)}${it.mood.topicLabel && it.mood.tone !== 'dark' ? ' · 주제: ' + esc(it.mood.topicLabel) : ''} · 미리 준비한 댓글: ${esc(it.mood.first || '')}">${esc(it.mood.sub === 'celebrate' ? '축하' : MOODCHIP[it.mood.tone] || '')}${it.mood.topicLabel && it.mood.tone !== 'dark' ? ' · ' + esc(it.mood.topicLabel.split('·')[0]) : ''}</span>` : '';
       const badge = md + (src === 'search' ? (isTop(it) ? `<span class="rk" title="이 키워드 검색 ${it.rank}번째 글">상위 ${it.rank}위</span>` : '')
         + (sc >= 0 ? `<span class="bsc ${sc >= REC_MIN ? 'hi' : ''}" title="공개 정보로 계산한 블로그 점수(검색 노출 제외)">${sc}점</span>` : '') : '');
       return `<li class="ci ${mk.p || why ? 'dim' : ''}" data-act="cmtOpen" data-src="${src}" data-i="${i}" title="새 탭에서 글을 열고 댓글창으로 이동해 댓글을 복사합니다">

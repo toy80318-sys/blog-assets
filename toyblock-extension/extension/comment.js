@@ -592,7 +592,8 @@
       const where = active.login ? ' 댓글을 쓰려면 네이버에 로그인해 주세요.' : active.box ? '' : ' 댓글창을 찾지 못했어요. 글 아래 "댓글" 버튼을 눌러 주세요(로그인이 풀렸거나 댓글을 닫아 둔 글일 수 있어요).';
       const MOODTXT = { dark: '어두운 글이라 위로하는 말투로', serious: '진중한 글이라 차분하게', fun: '재미있는 글이라 밝게', interesting: '흥미로운 글이라 궁금함을 살려', warm: '따뜻한 글이라 다정하게', info: '' };
       const mt = r.mood ? (r.mood.sub === 'celebrate' ? '축하할 글이라 축하 인사로' : MOODTXT[r.mood.tone] || '') : '';
-      const moodNote = mt ? `글 분위기: ${r.mood.label} — ${mt} 만들었어요. ` : '';
+      const tp = r.mood && r.mood.topicLabel ? ` · 주제: ${r.mood.topicLabel}` : '';
+      const moodNote = mt || tp ? `글 분위기: ${r.mood.label}${tp}${mt ? ' — ' + mt + ' 만들었어요' : ''}. ` : '';
       if (moodNote) setNote([moodNote, r.note, pacing(r.stats)].filter(Boolean).join(' '));
       if (filled) setStatus(`${by} 만든 1번을 댓글창에 넣어 두었어요 (복사도 됨).` + where, 'ok');
       else if (copied) setStatus(`${by} 만든 1번이 복사됐어요 — 댓글창에 ${PASTE}` + where, 'ok');

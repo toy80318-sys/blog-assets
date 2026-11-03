@@ -163,11 +163,16 @@
     personal: /(우리|저희|제가|내가|나는|저는|엄마|아빠|어머니|아버지|할머니|할아버지|남편|아내|아이가|우리\s?집)/,
     fun: /(ㅋㅋ|ㅎㅎ|웃긴|웃겨|웃겼|빵\s?터|개그|유머|장난|꿀잼|레전드|웃음|재밌|재미있|신나|드립|밈|먹방|브이로그|놀이|챌린지)/g,
     interesting: /(신기|놀라운|놀랐|흥미|처음\s?알|몰랐던|비밀|숨은|이색|트렌드|신상|신제품|리뷰|후기|여행|탐방|체험|방문기|언박싱|비교|실험|테스트|구경|핫플)/g,
-    warm: /(가족|아이|아기|육아|엄마|아빠|부모님|감사|고마|행복|사랑|결혼|기념일|생일|선물|반려|강아지|고양이|추억|감동|따뜻|응원|일상|소소한)/g,
+    warm: /(가족|우리\s?아이|아이와|아이랑|아이가|아이들|아기|육아|엄마|아빠|부모님|감사|고마|행복|사랑|결혼|기념일|생일|선물|반려|강아지|고양이|추억|감동|따뜻|응원|일상|소소한)/g,
     celebrate: /(합격|축하|결혼식|출산|돌잔치|생일|개업|오픈|입학|졸업|승진|당첨|수상|100일|1주년|기념일)/g,
     serious: /(정책|분석|전망|경제|시사|제도|연구|논문|사회|문제점|칼럼|리포트|보고서|법률|판결|개정|이슈|논란|통계|역사|의견|생각해\s?볼)/g
   };
   function classify(post) {
+    const m = classifyMood(post);
+    const t = classifyTopic(post);
+    return { ...m, topic: t.topic, topicLabel: t.label };
+  }
+  function classifyMood(post) {
     const T = String((post && post.title) || ''), S = ((post && post.sections) || []).join(' '), B = String((post && post.body) || '').slice(0, 4000);
     const score = (re) => { const c = (x) => ((x.match(re) || []).length); return c(T) * 3 + c(S) * 2 + Math.min(c(B), 6); };
     const all = T + ' ' + S + ' ' + B;
@@ -184,6 +189,75 @@
     const best = ['fun', 'interesting', 'warm', 'serious'].sort((a, b) => sc[b] - sc[a])[0];
     if (sc[best] >= 3) return { tone: best, sub: '', label: TONE_LABEL[best] };
     return { tone: 'info', sub: '', label: TONE_LABEL.info };
+  }
+
+  // ───────────── 글 주제 ─────────────
+  // 주제마다 그 주제에만 어울리는 칭찬(main)과 덧붙이는 문장(extra). 어두운 글에는 쓰지 않습니다.
+  // 경험을 지어내는 말("먹어 봤는데") 대신 바람·다짐("가 보고 싶어요", "따라 해 볼게요")만 씁니다.
+  const TOPIC = {
+    food: { label: '맛집·음식', re: /(맛집|식당|메뉴|먹었|먹방|카페|디저트|빵집|브런치|맛있|맛보|웨이팅|오마카세|술집|포장|배달|한식|일식|중식|양식|분식|고기집|횟집|국밥)/g,
+      main: ['사진만 봐도 침이 고이네요!', '메뉴 하나하나 맛깔나게 소개해 주셨네요.', '가격이랑 분위기까지 꼼꼼히 알려 주셔서 좋아요.', '음식 사진이 정말 먹음직스러워요!', '이런 맛집 정보 너무 반가워요.', '보기만 해도 배가 고파지네요.'],
+      extra: ['다음에 근처 가면 꼭 들러 볼게요.', '저장해 두고 가족이랑 가 보려고요.', '{K} 메뉴가 특히 궁금해지네요.'] },
+    recipe: { label: '요리·레시피', re: /(레시피|요리|재료|조리|끓이|볶음|볶아|굽기|구워|에어프라이어|밑반찬|반찬|홈베이킹|만드는\s?법|양념|소스|간단\s?요리)/g,
+      main: ['레시피를 차근차근 알려 주셔서 따라 하기 쉽겠어요.', '재료랑 순서가 한눈에 들어와요.', '집에서도 쉽게 만들 수 있겠네요!', '완성 사진이 정말 맛있어 보여요.', '요리 솜씨가 대단하세요!'],
+      extra: ['이번 주말에 꼭 따라 만들어 볼게요.', '양념 비율까지 적어 주셔서 든든해요.', '장 볼 때 재료부터 챙겨야겠어요.'] },
+    travel: { label: '여행', re: /(여행|숙소|호텔|펜션|리조트|항공|관광|코스|여행지|해외|투어|가볼만한|가볼\s?만한|명소|여행\s?일정|뚜벅이|드라이브\s?코스)/g,
+      main: ['사진만 봐도 여행 온 기분이에요.', '코스를 알차게 짜셨네요!', '풍경이 정말 예뻐요.', '여행 정보가 한눈에 정리돼 있어 좋아요.', '이동 동선까지 알려 주셔서 큰 도움이 되겠어요.', '여행 분위기가 그대로 전해져요.'],
+      extra: ['다음 여행지 후보로 저장해 둘게요.', '{K} 가게 되면 이 글 다시 찾아볼게요.', '숙소 정보까지 있어서 든든하네요.'] },
+    parenting: { label: '육아', re: /(육아|아기|유아|어린이집|유치원|이유식|기저귀|돌잔치|엄마표|키즈|아이와|아이랑|아이가|우리\s?아이|초등학생|신생아|육아템)/g,
+      main: ['아이 키우는 일상이 참 사랑스러워요.', '아이 웃는 모습에 저까지 미소 지어지네요.', '육아하시면서 이렇게 정리까지 하시다니 대단하세요.', '엄마 마음이 고스란히 느껴지는 글이에요.', '아이와 함께하는 시간이 참 예뻐요.'],
+      extra: ['아이와 함께 해 볼 거리로 저장해 둘게요.', '아이도 엄마도 늘 건강하길 바라요.', '하루하루 커 가는 모습이 기대되네요.'] },
+    pet: { label: '반려동물', re: /(강아지|고양이|반려견|반려묘|댕댕|냥이|멍멍이|집사|펫|동물병원|사료|산책\s?코스|애견|애묘)/g,
+      main: ['아이가 너무 귀여워요!', '사진 보는 내내 심장이 녹았어요.', '사랑 듬뿍 받는 게 느껴져요.', '표정이 정말 사랑스러워요.', '집사님 정성이 대단하세요.'],
+      extra: ['건강하게 오래오래 함께하길 바라요.', '다음 사진도 기다릴게요.', '보기만 해도 힐링돼요.'] },
+    home: { label: '살림·정리', re: /(청소|정리정돈|수납|세탁|빨래|살림|주방|냉장고|욕실|곰팡이|얼룩|보관법|자취|원룸|분리수거|옷장\s?정리|살림템)/g,
+      main: ['살림 노하우가 가득하네요!', '바로 따라 하기 좋은 방법이에요.', '정리된 모습만 봐도 속이 시원해요.', '생활에 바로 쓸 수 있는 꿀팁이네요.', '알뜰한 살림 솜씨가 느껴져요.'],
+      extra: ['이번 주말에 저희 집도 정리해 봐야겠어요.', '체크해 두고 하나씩 해 볼게요.', '사진으로 보여 주셔서 이해가 쉬웠어요.'] },
+    interior: { label: '인테리어', re: /(인테리어|가구|조명|셀프\s?인테리어|리모델링|홈스타일링|방꾸미기|소품|집꾸미기|벽지|커튼|러그)/g,
+      main: ['집 분위기가 정말 아늑해요.', '감각이 대단하세요!', '소품 하나하나 센스가 느껴져요.', '배치가 깔끔해서 공간이 넓어 보여요.', '사진 속 공간이 너무 예뻐요.'],
+      extra: ['저희 집에도 참고해 볼게요.', '조명 하나로 이렇게 달라지네요.', '인테리어 아이디어 얻어 가요.'] },
+    beauty: { label: '뷰티·패션', re: /(화장품|스킨케어|메이크업|피부|향수|네일|헤어|코디|패션|룩북|데일리룩|옷차림|신발|가방|쿠션|선크림|립)/g,
+      main: ['코디가 정말 센스 있어요!', '색감 조합이 예뻐요.', '제품 설명이 꼼꼼해서 고르기 쉽겠어요.', '스타일이 너무 잘 어울리세요.', '사용감까지 자세히 알려 주셔서 좋아요.'],
+      extra: ['쇼핑할 때 참고할게요.', '다음 코디도 기대할게요.', '{K} 정보 저장해 둘게요.'] },
+    tech: { label: 'IT·전자기기', re: /(아이폰|갤럭시|노트북|태블릿|아이패드|맥북|앱|어플|컴퓨터|PC|키보드|모니터|이어폰|설정법|업데이트|AI|챗GPT|프로그램|엑셀|윈도우|단축키|스마트폰)/g,
+      main: ['설정 방법을 단계별로 알려 주셔서 따라 하기 쉬워요.', '기능 정리가 정말 깔끔하네요.', '스크린샷까지 있어서 이해가 쉬워요.', '이런 꿀팁 너무 유용해요!', '어려운 내용을 쉽게 풀어 주셨네요.'],
+      extra: ['바로 설정해 봐야겠어요.', '{K} 쓸 때 참고할게요.', '즐겨찾기 해 두고 다시 볼게요.'] },
+    fitness: { label: '운동·건강관리', re: /(운동|헬스|필라테스|요가|러닝|마라톤|홈트|스트레칭|등산|자전거|수영|근력|체력|걷기|만보)/g,
+      main: ['꾸준히 운동하시는 모습 정말 멋져요!', '동작 설명이 자세해서 따라 하기 좋겠어요.', '건강한 기운이 전해져요.', '꾸준함이 대단하세요.', '자극 받고 갑니다!'],
+      extra: ['저도 오늘부터 조금씩 해 볼게요.', '무리하지 마시고 즐겁게 운동하세요.', '다음 기록도 응원할게요.'] },
+    culture: { label: '책·영화·공연', re: /(독서|도서|책\s?추천|책\s?리뷰|읽은\s?책|소설|에세이|영화|드라마|넷플릭스|공연|전시회|뮤지컬|연극|콘서트|작가|줄거리|관람)/g,
+      main: ['감상평이 정말 와닿아요.', '줄거리를 깔끔하게 정리해 주셨네요.', '읽고 나니 저도 보고 싶어졌어요.', '깊이 있는 감상이 인상적이에요.', '추천해 주신 이유가 잘 느껴져요.'],
+      extra: ['보고 싶은 목록에 담아 둘게요.', '{K} 이야기 더 듣고 싶어요.', '다음 감상평도 기대할게요.'] },
+    money: { label: '생활경제·혜택', re: /(재테크|절약|가계부|적금|청약|연말정산|세금|환급|지원금|혜택|신청\s?방법|할인|포인트|카드\s?혜택|보조금|정부지원)/g,
+      main: ['놓치기 쉬운 혜택을 잘 정리해 주셨네요.', '신청 방법이 한눈에 들어와요.', '꼭 챙겨야 할 내용이에요.', '알뜰한 정보 감사합니다.', '복잡한 내용을 쉽게 풀어 주셨네요.'],
+      extra: ['기간 놓치지 않게 메모해 둘게요.', '주변에도 알려 줘야겠어요.', '{K} 챙길 때 참고할게요.'] },
+    car: { label: '자동차', re: /(자동차|차량|세차|타이어|엔진오일|주유|전기차|하이브리드|신차|중고차|블랙박스|차박|주차|운전)/g,
+      main: ['차 관리 꿀팁이 가득하네요.', '자동차 정보가 알기 쉽게 정리돼 있어요.', '관리 정성이 대단하세요.', '운전자에게 꼭 필요한 내용이에요.', '사진으로 보여 주셔서 이해가 쉬워요.'],
+      extra: ['정비할 때 참고할게요.', '{K} 관리할 때 다시 볼게요.', '안전 운전 하세요!'] },
+    camping: { label: '캠핑·아웃도어', re: /(캠핑|차박|텐트|글램핑|캠핑장|불멍|캠핑용품|타프|오토캠핑|백패킹)/g,
+      main: ['캠핑 분위기가 너무 좋아요!', '사이트 세팅이 감성 가득하네요.', '장비 정리가 깔끔해서 참고하기 좋아요.', '사진만 봐도 힐링돼요.', '캠핑 고수의 느낌이 나요!'],
+      extra: ['다음 캠핑 때 참고할게요.', '이 캠핑장 저장해 둘게요.', '안전하고 즐거운 캠핑 하세요.'] },
+    study: { label: '공부·자격증', re: /(공부|자격증|시험|강의|학습|영어|독학|수험|기출|합격\s?후기|공부법|인강|토익|면접)/g,
+      main: ['공부 방법을 꼼꼼하게 정리해 주셨네요.', '노력하신 과정이 그대로 느껴져요.', '수험생에게 정말 도움이 되겠어요.', '계획표가 체계적이라 배울 점이 많아요.', '꾸준히 하시는 모습이 대단하세요.'],
+      extra: ['저도 의지 다지고 갑니다.', '공부할 때 참고할게요.', '앞으로도 좋은 결과 있길 응원해요.'] },
+    plants: { label: '식물·가드닝', re: /(식물|화분|텃밭|가드닝|분갈이|다육이|꽃집|꽃꽂이|반려식물|베란다\s?정원|새싹)/g,
+      main: ['초록초록해서 보는 눈이 편안해요.', '정성 들여 키우신 게 느껴져요.', '식물이 정말 싱싱하네요!', '키우는 방법을 잘 알려 주셨네요.', '사진 속 초록빛이 너무 예뻐요.'],
+      extra: ['저도 화분 하나 들여 보고 싶어지네요.', '물 주기 팁 참고할게요.', '다음 성장기도 기대할게요.'] }
+  };
+  const TOPICS = Object.fromEntries(Object.entries(TOPIC).map(([k, v]) => [k, {
+    label: v.label, re: v.re,
+    main: v.main.map((t, i) => ({ id: `P${k}${i + 1}`, text: t, cat: 'topic', key: /\{K\}/.test(t), tones: new Set(LIGHT.split(' ')), lead: false })),
+    extra: v.extra.map((t, i) => ({ id: `Q${k}${i + 1}`, text: t, cat: 'topic', key: /\{K\}/.test(t), tones: new Set(LIGHT.split(' ')) }))
+  }]));
+  function classifyTopic(post) {
+    const T = String((post && post.title) || ''), S = ((post && post.sections) || []).join(' '), B = String((post && post.body) || '').slice(0, 4000);
+    let best = '', bs = 0;
+    for (const [k, v] of Object.entries(TOPICS)) {
+      const c = (x) => (x.match(v.re) || []).length;
+      const sc = c(T) * 3 + c(S) * 2 + Math.min(c(B), 6);
+      if (sc > bs) { bs = sc; best = k; }
+    }
+    return bs >= 3 ? { topic: best, label: TOPICS[best].label } : { topic: '', label: '' };
   }
 
   const SMILES = ['^^', '^_^', '^ㅁ^', '^-^', '^^*', '^^b', '^o^'];                                   // 눈웃음
@@ -322,6 +396,7 @@
     // 핵심어가 감정·분위기 말(웃긴·축하해·슬프 등)이면 쓰지 않습니다 — "웃긴 관련해서"처럼 어색해지지 않게
     let K = pickKeyword(post);
     if (K && ['fun', 'celebrate', 'warm', 'loss', 'hard'].some((k) => new RegExp(KW[k].source).test(K))) K = '';
+    if (K && K.length <= 3 && /(은|는|던|었|았|인|운|된)$/.test(K)) K = ''; // 읽은·좋은 같은 꾸밈말은 핵심어로 쓰지 않음
     const SECS = (post.sections || []).map(cleanSection).filter((x) => x.length >= 3 && x.length <= 22 && !/['"]/.test(x));
     const lengthMode = LONG_P[opt.length] != null ? opt.length : 'mix';
     const nick = opt.callName === false ? '' : callable(post.nick);
@@ -347,9 +422,11 @@
     // 뼈대별로 문장을 만듭니다
     // 분위기 문장: 정보 글이 아니면 셋 중 둘 정도에 그 분위기 문장을 씁니다(축하할 글은 축하 문장을 꼭 하나)
     const MP = MOODS[moodKey] || [];
-    const MAINX = MP.length ? [...MAINS, ...MP, ...MP] : MAINS; // 분위기 문장을 더 자주 고르게
+    const TP = mood.topic && TOPICS[mood.topic] ? TOPICS[mood.topic] : null;
+    const TM = TP ? TP.main : [];
+    const MAINX = [...MAINS, ...MP, ...MP, ...TM, ...TM]; // 분위기·주제 문장을 더 자주 고르게
     const build = {
-      short: () => { const t = MP.length && rnd() < 0.6 ? pick(MP) : pick([...MAINX, ...POOLS.wow]); useT = rnd() < 0.5; return [t]; },
+      short: () => { const r0 = rnd(); const t = TM.length && r0 < 0.4 ? pick(TM) : MP.length && r0 < 0.75 ? pick(MP) : pick([...MAINX, ...POOLS.wow]); useT = rnd() < 0.5; return [t]; },
       lead: () => { const l = pick(POOLS.lead, (x) => (K ? !x.nokey : x.nokey)); const m = pick(MAINX, (x) => x.lead); return m ? [l, m] : [pick(MAINX)]; },
       about: () => { const a = pick(POOLS.about); const key = a.text.includes('관련해서') ? 'ab1' : a.text.endsWith('대해') ? 'ab2' : 'of'; const m = pick(MAINX, (x) => x[key]); return m ? [a, m] : [pick(MAINX)]; },
       // 주인 칭찬 뒤에 글 칭찬·좋은 정보를 잇기도 하고, 핵심어가 있으면 "~ 관련해서 좋은 정보 감사합니다"처럼 잇기도 합니다
@@ -372,6 +449,7 @@
     if (moodKey === 'celebrate' && !plans.includes('short')) plans[0] = 'short';
     const fillS = (text) => text.replace(/\{S\}/g, () => one(SECS));
 
+    let usedTopic = false;
     return plans.map((plan, pi) => {
       let parts = build[plan]().filter(Boolean);
       if (!parts.length) parts = [pick([...MAINX, ...POOLS.wow])].filter(Boolean);
@@ -379,8 +457,11 @@
       if (moodKey === 'celebrate' && !parts.some((t) => t.id[0] === 'C') && (pi === 0 || rnd() < 0.5)) { const c = pick(MOODS.celebrate); if (c) parts.unshift(c); }
       if (longs[pi]) {
         const n = lengthMode === 'long' && (plan === 'short' || rnd() < 0.3) ? 2 : 1; // 짧은 뼈대는 길게 쓸 때 두 문장을 더해요
-        for (let k = 0; k < n; k++) { const x = pick(POOLS.extra, extraOk); if (x) parts.push(x); }
+        for (let k = 0; k < n; k++) { const x = TP && rnd() < 0.5 ? pick(TP.extra, extraOk) : pick(POOLS.extra, extraOk); if (x) parts.push(x); }
       }
+      // 주제가 있는 글: 셋 중 적어도 하나에는 그 주제 문장이 들어가게
+      if (TP && pi === plans.length - 1 && !usedTopic && !parts.some((t) => t.cat === 'topic')) { const x = pick(TM); if (x) parts.splice(Math.min(1, parts.length), 0, x); }
+      if (parts.some((t) => t.cat === 'topic')) usedTopic = true;
       // 이어 쓰기: "~는데"·"~ 관련해서" 뒤에는 한 칸, 완결 문장끼리는 한 칸
       let text = parts.map((t) => fillS(fillK(t.text))).join(' ');
       useT = true;
@@ -410,7 +491,7 @@
         else { const t2 = text.replace(/([.!])\s/, `$1 ${e} `); text = t2 !== text ? t2 : text + ' ' + e; }
       } else if (r < D.smile + D.emoji + D.tilde) text = text.replace(/[.!]$/, '') + '~';
       if (nick) text = `${nick}님 ` + text;
-      return { text, source: 'template', tone: mood.tone, tplId: `v2:${plan}:` + parts.map((t) => t.id).join('+') };
+      return { text, source: 'template', tone: mood.tone, topic: mood.topic || '', tplId: `v2:${plan}:` + parts.map((t) => t.id).join('+') };
     });
   }
 
@@ -476,6 +557,7 @@
       warm: mood.sub === 'celebrate' ? '이 글은 축하할 일이 담긴 글로 보인다. 축하 인사를 꼭 넣고 🎉 👏 같은 이모티콘을 쓴다.' : '이 글은 따뜻한 일상 글로 보인다. 다정하게 공감하고 🥰 💕 🌷 같은 이모티콘을 쓴다.',
       info: '이 글은 정보 글로 보인다. 도움이 됐다는 말과 글의 핵심 내용을 짚는다.'
     };
+    if (mood.topicLabel && mood.tone !== 'dark') rules.push(`글 주제: ${mood.topicLabel}. 이 주제에 맞는 구체적인 반응을 하나 이상 넣는다(예: 맛집이면 메뉴·분위기, 여행이면 풍경·코스, 반려동물이면 아이의 귀여움). 경험을 지어내지 말고 바람이나 다짐으로 쓴다(가 보고 싶어요, 따라 해 볼게요).`);
     rules.push('글 분위기: ' + GUIDE[mood.tone] + ' 글을 읽어 보고 분위기가 다르면 글 내용에 맞춘다. 분위기에 어울리지 않는 표현(슬픈 글에 웃음, 진지한 글에 장난)은 쓰지 않는다.');
     if (opt.avoid && opt.avoid.length) rules.push('최근에 쓴 댓글과 같은 문장·같은 시작을 피한다. 최근 댓글: ' + opt.avoid.slice(0, 3).map((x) => '"' + String(x).slice(0, 60) + '"').join(', '));
     if (opt.style) rules.push('사용자 추가 요청(위 규칙과 부딪히면 위 규칙을 따른다): ' + String(opt.style).slice(0, 300));
@@ -524,5 +606,5 @@
     return t.replace(/[^가-힣A-Za-z0-9]/g, '');
   }
 
-  g.NBXC = { classify, TONE_LABEL, norm, TEMPLATES, POOLS, COMBOS, compose, buildPrompt, parseDrafts, pickKeyword, callable, josa, tokens };
+  g.NBXC = { classify, classifyTopic, TOPIC_LABELS: Object.fromEntries(Object.entries(TOPIC).map(([k, v]) => [k, v.label])), TONE_LABEL, norm, TEMPLATES, POOLS, COMBOS, compose, buildPrompt, parseDrafts, pickKeyword, callable, josa, tokens };
 })(globalThis);

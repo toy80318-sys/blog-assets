@@ -600,7 +600,7 @@ async function aliveCheck(items) {
           await putPrepared(key, { mood, drafts, sig: sigOf(s.cmt, 'template') });
           first = drafts[0] ? drafts[0].text : '';
         } catch (_) {}
-        moods[key] = { tone: mood.tone, sub: mood.sub || '', label: mood.label, first };
+        moods[key] = { tone: mood.tone, sub: mood.sub || '', label: mood.label, topic: mood.topic || '', topicLabel: mood.topicLabel || '', first };
       }
     }
   };
@@ -703,7 +703,7 @@ async function cmtGenerate(msg) {
   if (drafts.length) await rememberTop(drafts[0], post.nick);
   const copied = msg.copy === true ? await copyText(drafts[0].text) : false;
   if (key) await logMark(key, 'g');
-  return { ok: true, drafts, provider, providerLabel: provider === 'template' ? '템플릿' : NBX.AI_PROVIDERS[provider].label, note, copied, stats: statsOf(await readLog()), mood: { tone: mood.tone, sub: mood.sub || '', label: mood.label }, prepared: fromPrepared };
+  return { ok: true, drafts, provider, providerLabel: provider === 'template' ? '템플릿' : NBX.AI_PROVIDERS[provider].label, note, copied, stats: statsOf(await readLog()), mood: { tone: mood.tone, sub: mood.sub || '', label: mood.label, topicLabel: mood.tone === 'dark' ? '' : mood.topicLabel || '' }, prepared: fromPrepared };
 }
 
 async function openForComment(msg, sender) {
