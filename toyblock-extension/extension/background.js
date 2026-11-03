@@ -906,6 +906,7 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
     case 'nbx-ai-test': return run(aiTest(msg.provider));
     case 'nbx-cmt-queue-start': return run(queueStart(msg, sender));
     case 'nbx-cmt-queue-next': return run(queueAdvance('skip', sender.tab && sender.tab.id));
+    case 'nbx-cmt-queue-now': return run(paceNext(!!msg.force));
     case 'nbx-cmt-queue-resume': return run(queueResume());
     case 'nbx-cmt-queue-stop': return run(queueStop('사용자가 멈춤'));
     case 'nbx-cmt-queue-state': return run(getQueue().then(viewOf));
@@ -1031,12 +1032,19 @@ const QUEUE_NEXT_MS = 2500;    // 등록 뒤 다음 글로 넘어가기까지
 const HOUR_PAUSE = 20;         // 최근 1시간 댓글이 이만큼이면 잠시 멈춤
 const BUDDY_DAY_MAX = 50;      // 하루에 여는 이웃 추가 창 수
 const BUDDY_AGAIN_DAYS = 30;   // 한 번 신청 창을 연 블로그는 이 기간 동안 다시 열지 않음
+// 천천히 소통: 1시간 동안 목표 개수만큼, 등록할 때마다 정한 쉬는 시간을 두고 다음 글을 엽니다(등록은 사용자가 직접)
+const PACE_TARGETS = [8, 10, 12, 15, 20];
+const PACE_RESTS = [60, 90, 120, 180, 240];   // 초
+const PACE_HOUR = 60 * 60e3;
+const PACE_ALARM = 'nbx-pace';
 const dayKey = (t = Date.now()) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 async function getQueue() { const r = await chrome.storage.session.get('nbxQueue').catch(() => ({})); return (r && r.nbxQueue) || null; }
 function viewOf(q) {
   if (!q) return { state: 'none' };
-  return { state: q.state, i: q.i, total: q.items.length, done: q.done, skipped: q.skipped, dead: q.dead || 0, relation: q.relation, note: q.note || '', buddy: q.buddy, at: Date.now() };
+  const v = { state: q.state, i: q.i, total: q.items.length, done: q.done, skipped: q.skipped, dead: q.dead || 0, relation: q.relation, note: q.note || '', buddy: q.buddy, at: Date.now() };
+  if (q.pace) v.pace = { target: q.pace.target, restSec: Math.round(q.pace.restMs / 1000), startAt: q.pace.startAt, endAt: q.pace.endAt, rest: q.rest ? { until: q.rest.until, ms: q.rest.ms } : null };
+  return v;
 }
 async function setQueue(q) {
   await chrome.storage.session.set({ nbxQueue: q }).catch(() => {});
@@ -1069,6 +1077,12 @@ function queueStart(msg, sender) {
     if (!items.length) return { ok: false, error: 'empty' };
     const s = await getSettings();
     const q = { id: Date.now(), items, i: 0, done: 0, skipped: 0, dead: 0, relation, buddy: relation === 'other' && s.cmt.buddyAuto, state: 'run', note: '', tabId: null };
+    if (msg.pace) {
+      const target = PACE_TARGETS.includes(Number(msg.pace.target)) ? Number(msg.pace.target) : 12;
+      const rest = PACE_RESTS.includes(Number(msg.pace.rest)) ? Number(msg.pace.rest) : 120;
+      q.pace = { target, restMs: rest * 1000, startAt: Date.now(), endAt: Date.now() + PACE_HOUR };
+      chrome.alarms.clear(PACE_ALARM).catch(() => {});
+    }
     if (!(await nextAlive(q))) return { ok: false, error: 'all-deleted', dead: q.dead };
     const props = { url: postUrl(items[q.i]), active: true };
     if (sender.tab) { props.index = sender.tab.index + 1; props.openerTabId = sender.tab.id; props.windowId = sender.tab.windowId; }
@@ -1087,9 +1101,12 @@ function queueAdvance(reason, fromTab, key) {
     if (!q || q.state !== 'run') return { ok: false, error: 'not-running' };
     if (fromTab != null && fromTab !== q.tabId) return { ok: false, error: 'other-tab' };
     if (key && (!q.items[q.i] || postKeyOf(q.items[q.i].blogId, q.items[q.i].logNo) !== key)) return { ok: false, error: 'moved' };
+    if (q.rest) { reason = 'posted'; q.rest = null; chrome.alarms.clear(PACE_ALARM).catch(() => {}); } // 쉬는 중이면 이 글은 이미 등록한 글
     if (reason === 'posted') q.done++; else q.skipped++;
     q.i++;
-    if (!(await nextAlive(q))) { q.state = 'done'; q.note = q.dead ? `삭제된 글 ${q.dead}개는 건너뛰었어요.` : ''; return { ok: true, view: await setQueue(q) }; }
+    if (q.pace && q.done >= q.pace.target) { q.state = 'done'; q.note = `천천히 소통 목표 ${q.pace.target}개를 채웠어요. 오늘도 수고했어요!`; return { ok: true, view: await setQueue(q) }; }
+    if (q.pace && Date.now() >= q.pace.endAt) { q.state = 'done'; q.note = '1시간이 지나 천천히 소통을 마쳤어요.'; return { ok: true, view: await setQueue(q) }; }
+    if (!(await nextAlive(q))) { q.state = 'done'; q.note = (q.pace ? '목록의 글을 모두 돌았어요. ' : '') + (q.dead ? `삭제된 글 ${q.dead}개는 건너뛰었어요.` : ''); return { ok: true, view: await setQueue(q) }; }
     const st = statsOf(await readLog());
     if (st.hour >= HOUR_PAUSE) {
       q.state = 'paused';
@@ -1121,7 +1138,8 @@ function queueStop(why) {
   return queued(async () => {
     const q = await getQueue();
     if (!q) return { ok: true, view: viewOf(null) };
-    q.state = 'stopped'; q.note = why || '';
+    q.state = 'stopped'; q.note = why || ''; q.rest = null;
+    chrome.alarms.clear(PACE_ALARM).catch(() => {});
     const v = await setQueue(q);
     await chrome.storage.session.remove('nbxQueue').catch(() => {});
     return { ok: true, view: v };
@@ -1134,9 +1152,35 @@ async function queueOnPosted(tabId, key, ms = QUEUE_NEXT_MS) {
   if (!q || q.state !== 'run' || q.tabId !== tabId) return { ok: false };
   const it = q.items[q.i];
   if (!it || postKeyOf(it.blogId, it.logNo) !== key) return { ok: false };
+  if (q.pace) return paceRest(tabId, key);
   setTimeout(() => { queueAdvance('posted', tabId, key); }, ms); // 그사이 건너뛰기로 이미 넘어갔으면 다시 넘기지 않음
   return { ok: true };
 }
+// 천천히 소통: 등록 뒤 쉬는 시간을 두고 다음 글로(목표를 채웠거나 1시간이 지났으면 바로 마침)
+function paceRest(tabId, key) {
+  return queued(async () => {
+    const q = await getQueue();
+    if (!q || !q.pace || q.state !== 'run' || q.tabId !== tabId || q.rest) return { ok: false };
+    const it = q.items[q.i];
+    if (!it || postKeyOf(it.blogId, it.logNo) !== key) return { ok: false };
+    const now = Date.now();
+    if (q.done + 1 >= q.pace.target || now >= q.pace.endAt || q.i + 1 >= q.items.length) { setTimeout(() => queueAdvance('posted', tabId, key), 1500); return { ok: true, last: true }; }
+    const ms = Math.min(q.pace.restMs, Math.max(0, q.pace.endAt - now));
+    q.rest = { until: now + ms, ms, key, tabId };
+    await setQueue(q);
+    chrome.alarms.create(PACE_ALARM, { when: q.rest.until });
+    if (q.items[q.i + 1]) prefetch(q.items[q.i + 1]);
+    return { ok: true, rest: ms };
+  });
+}
+// 쉬는 시간이 끝났을 때(알람) · 카드에서 [지금 다음 글로]를 눌렀을 때
+async function paceNext(force) {
+  const q = await getQueue();
+  if (!q || !q.rest || q.state !== 'run') return { ok: false, error: 'no-rest' };
+  if (!force && Date.now() < q.rest.until - 1500) return { ok: false, error: 'early', until: q.rest.until };
+  return queueAdvance('posted', q.rest.tabId, q.rest.key);
+}
+chrome.alarms.onAlarm.addListener((a) => { if (a.name === PACE_ALARM) paceNext(false); });
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   const q = await getQueue();
   if (q && q.tabId === tabId && (q.state === 'run' || q.state === 'paused')) queueStop('연속 소통 탭을 닫아 멈췄어요');

@@ -47,6 +47,16 @@
 .qb .qa{display:flex;gap:6px;margin-top:6px}.qb .qa button{flex:1;border:1px solid #03a94d;background:#fff;color:#027a38;border-radius:8px;padding:4px 0;font:inherit;font-size:11.5px;font-weight:700;cursor:pointer}
 .qb .qa button.p{background:#03a94d;color:#fff}.qb .qa button[hidden]{display:none}
 .card.min .qb{display:none!important}
+.rest{display:none;border:1.5px solid #cfe9da;background:#fff;border-radius:10px;padding:8px 10px;margin-bottom:6px}
+.rest.on{display:block}.card.min .rest{display:none!important}
+.rest .rt{display:flex;align-items:baseline;justify-content:space-between;gap:6px;font-size:12px;color:#5b6470}
+.rest .cd{font-size:20px;font-weight:800;color:#027a38;font-variant-numeric:tabular-nums}
+.rest .bar{height:5px;background:#e8f5ee;border-radius:9px;overflow:hidden;margin:5px 0 8px}.rest .bar i{display:block;height:100%;width:0;background:#03a94d;transition:width .9s linear}
+.rest .tip{background:#f7f9fa;border-radius:9px;padding:8px 10px;min-height:74px}
+.rest .tc{font-size:11.5px;font-weight:800;color:#027a38;margin-bottom:3px}
+.rest .tt{font-size:12.5px;line-height:1.6;color:#2b323b;transition:opacity .3s}.rest .tt.fade{opacity:0}
+.rest .tn{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:5px;font-size:11px;color:#8a94a3}
+.rest .tn button{border:1px solid #d5dbe1;background:#fff;color:#5b6470;border-radius:7px;padding:1px 8px;font:inherit;font-size:11px;cursor:pointer}
 .go{display:none;gap:6px;margin:0 0 7px}.go.on{display:flex}
 .go button{border:1px solid #03a94d;background:#fff;color:#027a38;border-radius:9px;padding:7px 8px;font:inherit;font-size:12.5px;font-weight:800;cursor:pointer}
 .go button.p{flex:1;background:#03a94d;color:#fff}.go button[hidden]{display:none}.go button:disabled{opacity:.55;cursor:default}
@@ -350,7 +360,7 @@
       if (W) { const h = hostEl; W.onRetire(() => h.remove()); } // 위쪽 문서에 붙인 카드도 거둡니다
       hostEl.id = 'nbx-cmt-host';
       root = hostEl.attachShadow({ mode: 'open' });
-      root.innerHTML = `<style>${CSS}</style><div class="card"><div class="hd" data-a="expand"><b>💬 토이블록 댓글 도우미</b><span><button class="x" data-a="min" title="접기">—</button><button class="x" data-a="close" title="닫기">✕</button></span></div><div class="qb"><div class="qt"></div><div class="qn"></div><div class="qa"><button data-a="qresume" class="p" hidden>이어 하기</button><button data-a="qskip">건너뛰기 →</button><button data-a="qstop">멈추기</button></div></div><div class="st"></div><div class="go"><button data-a="post" class="p">✓ 댓글 등록</button><button data-a="nb" hidden>＋ 서로이웃</button></div><div class="note"></div><div class="list"></div><div class="tools"><button data-a="regen">↻ 다시 만들기</button><button data-a="tpl">템플릿으로</button></div><div class="ft"><span class="stats"></span><span class="links"><button class="lk" data-a="diag">진단 정보 복사</button><button class="lk" data-a="settings">설정</button></span></div></div><div class="toast"></div>`;
+      root.innerHTML = `<style>${CSS}</style><div class="card"><div class="hd" data-a="expand"><b>💬 토이블록 댓글 도우미</b><span><button class="x" data-a="min" title="접기">—</button><button class="x" data-a="close" title="닫기">✕</button></span></div><div class="qb"><div class="qt"></div><div class="qn"></div><div class="qa"><button data-a="qresume" class="p" hidden>이어 하기</button><button data-a="qskip">건너뛰기 →</button><button data-a="qstop">멈추기</button></div></div><div class="rest"><div class="rt"><span>다음 글까지</span><b class="cd">0:00</b></div><div class="bar"><i></i></div><div class="tip"><div class="tc"></div><div class="tt"></div><div class="tn"><button data-a="tprev" title="이전 팁">◀</button><span class="ti"></span><button data-a="tnext" title="다음 팁">▶</button></div></div></div><div class="st"></div><div class="go"><button data-a="post" class="p">✓ 댓글 등록</button><button data-a="nb" hidden>＋ 서로이웃</button></div><div class="note"></div><div class="list"></div><div class="tools"><button data-a="regen">↻ 다시 만들기</button><button data-a="tpl">템플릿으로</button></div><div class="ft"><span class="stats"></span><span class="links"><button class="lk" data-a="diag">진단 정보 복사</button><button class="lk" data-a="settings">설정</button></span></div></div><div class="toast"></div>`;
       (hostDoc.body || hostDoc.documentElement).appendChild(hostEl);
       root.addEventListener('click', onCardClick);
       placeCard();
@@ -406,6 +416,60 @@
       if (s.hour >= 20) return `최근 1시간에 댓글 ${s.hour}개를 등록했어요. 잠시 쉬었다가 이어 가는 게 좋아요.`;
       return '';
     }
+    // 천천히 소통 쉬는 시간: 남은 시간과 진행 막대, 10초마다 바뀌는 주의사항·팁
+    const TIPS = globalThis.NBXTIPS;
+    const TIP_KEY = 'nbxTipPos', TIP_EVERY = 10e3;
+    let restTimer = null, rest = null, tipDeck = null, tipPos = 0, tipAt = 0, nudged = false;
+    function showTip(step) {
+      if (!TIPS || !root) return;
+      if (!tipDeck) return;
+      tipPos = (tipPos + step + tipDeck.length) % tipDeck.length;
+      const tp = tipDeck[tipPos];
+      const tt = root.querySelector('.rest .tt');
+      tt.classList.add('fade');
+      setTimeout(() => {
+        if (!root) return;
+        root.querySelector('.rest .tc').textContent = tp.label;
+        tt.textContent = tp.text;
+        tt.classList.remove('fade');
+        root.querySelector('.rest .ti').textContent = `${tipPos + 1} / ${tipDeck.length}`;
+      }, step ? 250 : 0);
+      tipAt = Date.now();
+      chrome.storage.local.set({ [TIP_KEY]: { seed: tipDeck.seed, i: tipPos } }).catch(() => {});
+    }
+    async function restBox(r) {
+      const box = root && root.querySelector('.rest');
+      if (!box) return;
+      if (!r) { rest = null; clearInterval(restTimer); restTimer = null; box.classList.remove('on'); const hb = root.querySelector('.hd b'); if (hb) hb.textContent = '💬 토이블록 댓글 도우미'; return; }
+      const fresh = !rest || rest.until !== r.until;
+      rest = r;
+      box.classList.add('on');
+      if (fresh) {
+        nudged = false;
+        if (TIPS && !tipDeck) {
+          const st = await chrome.storage.local.get(TIP_KEY).then((x) => x && x[TIP_KEY]).catch(() => null);
+          const seed = st && st.seed ? st.seed : (Date.now() % 2147483647) || 7;
+          tipDeck = TIPS.deck(seed); tipDeck.seed = seed;
+          tipPos = st && st.seed ? (st.i || 0) : -1;
+        }
+        showTip(1);
+      }
+      if (!restTimer) restTimer = setInterval(tickRest, 1000);
+      tickRest();
+    }
+    function tickRest() {
+      if (!rest || !root) return;
+      const left = Math.max(0, rest.until - Date.now());
+      const sec = Math.ceil(left / 1000);
+      const txt = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+      root.querySelector('.rest .cd').textContent = txt;
+      root.querySelector('.rest .bar i').style.width = `${Math.min(100, 100 - (left / rest.ms) * 100)}%`;
+      const hb = root.querySelector('.hd b');
+      if (hb) hb.textContent = $('.card').classList.contains('min') ? `🐢 다음 글까지 ${txt}` : '💬 토이블록 댓글 도우미';
+      if (Date.now() - tipAt >= TIP_EVERY) showTip(1);
+      // 알람이 늦을 때를 대비해, 시간이 지나도 넘어가지 않으면 한 번 더 알려 줍니다
+      if (!left && !nudged && Date.now() - rest.until > 4000) { nudged = true; send({ type: 'nbx-cmt-queue-now' }); }
+    }
     // 연속 소통 막대: 몇 번째 글인지, 건너뛰기·멈추기, 멈춘 뒤 이어 하기
     function renderQueue(v) {
       const qb = $('.qb');
@@ -416,12 +480,23 @@
       qb.classList.add('on');
       const btn = (a) => root.querySelector(`.qb [data-a="${a}"]`);
       const running = v.state === 'run';
+      const resting = !!(running && v.pace && v.pace.rest);
       btn('qskip').hidden = !running; btn('qstop').hidden = !(running || v.state === 'paused');
+      btn('qskip').textContent = resting ? '지금 다음 글로 →' : '건너뛰기 →';
+      btn('qskip').disabled = false;
+      restBox(resting ? v.pace.rest : null);
       btn('qresume').hidden = v.state !== 'paused';
       const t = qb.querySelector('.qt'), n = qb.querySelector('.qn');
-      if (v.state === 'done') { t.innerHTML = '<b>연속 소통 끝 ✓</b>'; n.textContent = `등록 ${v.done}개 · 건너뜀 ${v.skipped}개. 수고했어요!${v.note ? ' ' + v.note : ''}`; }
+      if (v.state === 'done') { t.innerHTML = v.pace ? '<b>🐢 천천히 소통 끝 ✓</b>' : '<b>연속 소통 끝 ✓</b>'; n.textContent = `등록 ${v.done}개 · 건너뜀 ${v.skipped}개. 수고했어요!${v.note ? ' ' + v.note : ''}`; }
       else if (v.state === 'stopped') { t.innerHTML = '<b>연속 소통을 멈췄어요</b>'; n.textContent = v.note || '목록에서 다시 시작할 수 있어요.'; }
       else if (v.state === 'paused') { t.innerHTML = '<b>잠시 쉬어 가요</b>'; n.textContent = v.note; }
+      else if (v.pace) {
+        const left = Math.max(0, Math.ceil((v.pace.endAt - Date.now()) / 60e3));
+        t.innerHTML = `<b>🐢 천천히 소통 ${Math.min(v.done + (active.posted && !resting ? 1 : 0), v.pace.target)}/${v.pace.target}</b> · 남은 시간 ${left}분`;
+        n.textContent = resting ? '등록했어요 ✓ 쉬는 동안 아래 팁을 읽어 보세요. 시간이 되면 다음 글이 열려요.'
+          : active.posted ? (active.nb === 'wait' ? '등록했어요 ✓ 서로이웃 신청을 마치면 쉬는 시간이 시작돼요.' : '등록했어요 ✓')
+          : left <= 0 ? '1시간이 지났어요. 이 글까지 남기면 천천히 소통을 마쳐요.' : '글을 천천히 읽고 댓글을 확인해 등록해 주세요.';
+      }
       else { t.innerHTML = `<b>연속 소통 ${q.n}/${q.total}</b>`; n.textContent = active.posted ? (active.nb === 'wait' ? '등록했어요 ✓ 서로이웃 신청을 마치면 다음 글로 넘어가요.' : '등록했어요 ✓ 곧 다음 글로 넘어가요.') : '댓글을 확인하고 등록하면 다음 글로 넘어가요.'; }
       placeSoon();
     }
@@ -482,7 +557,7 @@
       active.lastFilled = '';
       return send({ type: 'nbx-cmt-posted', blogId, logNo, hold: !!hold }).then((r) => {
         if (r && r.stats) setStats(r.stats);
-        if (hostEl && hostEl.isConnected) setStatus(active.job.queue ? (hold ? '등록했어요 ✓ 서로이웃 신청을 마치면 다음 글로 넘어가요.' : '등록했어요 ✓ 곧 다음 글로 넘어가요.') : '등록했어요 ✓ 다음 글도 천천히 읽고 남겨 주세요.', 'ok');
+        if (hostEl && hostEl.isConnected) setStatus(active.job.queue ? (hold ? '등록했어요 ✓ 서로이웃 신청을 마치면 다음 글로 넘어가요.' : active.qview && active.qview.pace ? '등록했어요 ✓ 잠시 쉬었다가 다음 글로 넘어가요.' : '등록했어요 ✓ 곧 다음 글로 넘어가요.') : '등록했어요 ✓ 다음 글도 천천히 읽고 남겨 주세요.', 'ok');
         if (active.job.queue) renderQueue();
         renderGo();
       });
@@ -615,7 +690,14 @@
       if (a === 'min') { e.stopPropagation(); $('.card').classList.add('min'); placeCard(); return; }
       if (a === 'expand') { if ($('.card').classList.contains('min')) { $('.card').classList.remove('min'); placeCard(); } return; }
       if (!active) return;
-      if (a === 'qskip') { b.disabled = true; const r = await send({ type: 'nbx-cmt-queue-next' }); if (!r || !r.ok) { b.disabled = false; toast('지금은 건너뛸 수 없어요'); } return; }
+      if (a === 'tprev' || a === 'tnext') { showTip(a === 'tnext' ? 1 : -1); return; }
+      if (a === 'qskip') {
+        b.disabled = true;
+        const resting = active.qview && active.qview.pace && active.qview.pace.rest;
+        const r = await send(resting ? { type: 'nbx-cmt-queue-now', force: true } : { type: 'nbx-cmt-queue-next' });
+        if (!r || !r.ok) { b.disabled = false; toast(resting ? '지금은 넘어갈 수 없어요' : '지금은 건너뛸 수 없어요'); }
+        return;
+      }
       if (a === 'qstop') { const r = await send({ type: 'nbx-cmt-queue-stop' }); if (r && r.view) renderQueue(r.view); return; }
       if (a === 'qresume') { await send({ type: 'nbx-cmt-queue-resume' }); return; }
       // 댓글 등록·서로이웃 신청은 사람이 실제로 누른 클릭일 때만(페이지 스크립트가 누른 클릭은 무시)
@@ -683,7 +765,10 @@
       $('.list').textContent = '';
       setNote('');
       setStatus('댓글창으로 이동하는 중…');
-      if (job.queue) { root.querySelector('.qb').classList.remove('on'); renderQueue({ state: 'run' }); }
+      if (job.queue) {
+        root.querySelector('.qb').classList.remove('on'); renderQueue({ state: 'run' });
+        send({ type: 'nbx-cmt-queue-state' }).then((v) => { if (v && v.state && v.state !== 'none' && active && active.job === job) renderQueue(v); });
+      }
       renderGo();
       const box = await openCommentBox(post.logNo);
       if (box && box.login) { active.login = true; active.box = null; } else active.box = box;
