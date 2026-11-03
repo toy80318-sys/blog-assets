@@ -616,6 +616,33 @@
     render();
     refreshMarks();
   }
+  // 지금 보고 있는 글의 핵심 키워드: 제목 낱말 중 본문에 자주 나오는 것 두 개(제목 순서대로) → 키워드 노출 글 검색어로 기본 등록
+  function postKeywords() {
+    if (!currentLogNo()) return null;
+    const p = analyzePost();
+    if (!p || !p.title) return null;
+    const tw = p.titleWords.filter(([w]) => w.length >= 2);
+    const used = tw.filter(([, n]) => n >= 1).sort((a, b) => b[1] - a[1]);
+    const out = [];
+    const pos = (w) => p.title.indexOf(w);
+    if (used.length >= 2) out.push(used.slice(0, 2).map(([w]) => w).sort((a, b) => pos(a) - pos(b)).join(' '));
+    if (used[0]) out.push(used[0][0]);
+    if (!used.length && tw.length >= 2) out.push(tw.slice(0, 2).map(([w]) => w).join(' '));
+    const bk = p.keywords.find(([w]) => !out.some((x) => x.split(' ').includes(w)));
+    if (bk) out.push(used[0] && !used[0][0].includes(bk[0]) ? `${used[0][0]} ${bk[0]}` : bk[0]);
+    return { logNo: p.logNo || currentLogNo(), title: p.title, list: [...new Set(out)].filter((x) => x.length <= 40).slice(0, 3) };
+  }
+  // 키워드 노출 글: 사용자가 직접 입력한 검색어가 없으면 지금 글의 키워드를 넣고 한 번 검색합니다
+  function autoKeyword(run) {
+    const Q = S.cmt.search;
+    const k = postKeywords();
+    Q.suggest = k ? k.list : [];
+    if (!k || !k.list.length) return false;
+    if (Q.typed || (Q.autoFor === k.logNo && Q.q)) return false;
+    Q.q = k.list[0]; Q.autoFor = k.logNo; Q.autoQ = Q.q; Q.items = []; Q.done = false;
+    if (run) runSearch(); else render();
+    return true;
+  }
   async function runSearch() {
     const Q = S.cmt.search;
     const q = Q.q.trim();
@@ -817,6 +844,7 @@
     } else {
       const Q = C.search;
       h += `<div class="qrow"><input class="q" type="search" placeholder="키워드 (예: 장마철 우산 보관)" value="${esc(Q.q)}" maxlength="60"><button data-act="cmtSearch">${Q.loading ? '…' : '검색'}</button></div>`;
+      if (Q.suggest && Q.suggest.length) h += `<div class="kwsug"><span>지금 글 키워드</span>${Q.suggest.map((x) => `<button class="${x === Q.q.trim() ? 'on' : ''}" data-act="kwPick" data-q="${esc(x)}">${esc(x)}</button>`).join('')}</div>`;
       if (Q.error) h += `<div class="empty">검색 결과를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</div>`;
       else if (Q.done && !Q.items.length && !Q.loading) h += `<div class="empty">검색된 블로그 글이 없어요.</div>`;
       else {
@@ -937,9 +965,16 @@
     else if (act === 'repost') refreshPost();
     else if (act === 'postExpo') runPostExposure();
     else if (act === 'settings') chrome.runtime.sendMessage({ type: 'nbx-open-options' }).catch(() => {});
-    else if (act === 'rewrite') chrome.runtime.sendMessage({ type: 'nbx-cmt-rewrite-open', blogId: S.blogId, logNo: t.dataset.no, status: t.dataset.st, rank: t.dataset.rk, tag: t.dataset.tag }).catch(() => {});
+    else if (act === 'rewrite') chrome.runtime.sendMessage({ type: 'nbx-cmt-rewrite-open', blogId: S.blogId, logNo: t.dataset.no, status: t.dataset.st, rank: t.dataset.rk, tag: t.dataset.tag })
+      .then((r) => { if (r && r.error === 'missing') flash(r.repair ? '고쳐 쓰기 화면 파일이 설치 폴더에 없어요. 열린 업데이트 화면에서 버튼을 눌러 빠진 파일을 채워 주세요.' : '고쳐 쓰기 화면 파일이 없어요. 최신 zip으로 다시 설치해 주세요.'); }).catch(() => {});
     else if (act === 'tips') chrome.runtime.sendMessage({ type: 'nbx-open-tips', hash: t.dataset.hash || '' }).catch(() => {});
-    else if (act === 'cmtMode') { S.cmt.mode = t.dataset.mode; render(); if (S.cmt.mode === 'search') { const qi = root.querySelector('.q'); if (qi) qi.focus(); } }
+    else if (act === 'cmtMode') {
+      S.cmt.mode = t.dataset.mode;
+      if (S.cmt.mode === 'search' && autoKeyword(true)) return;
+      render();
+      if (S.cmt.mode === 'search') { const qi = root.querySelector('.q'); if (qi) qi.focus(); }
+    }
+    else if (act === 'kwPick') { const Q = S.cmt.search; Q.q = t.dataset.q || ''; Q.typed = false; Q.autoQ = Q.q; runSearch(); }
     else if (act === 'cmtReload') loadBuddy(false);
     else if (act === 'cmtMore') loadBuddy(true);
     else if (act === 'cmtSearch') { const qi = root.querySelector('.q'); if (qi) S.cmt.search.q = qi.value; runSearch(); }
@@ -978,7 +1013,7 @@
     }
     else if (act === 'cmtSection') window.open('https://section.blog.naver.com/BlogHome.naver?directoryNo=0&currentPage=1&groupId=0', '_blank', 'noopener');
   });
-  root.addEventListener('input', (e) => { if (e.target.classList && e.target.classList.contains('q')) S.cmt.search.q = e.target.value; });
+  root.addEventListener('input', (e) => { if (e.target.classList && e.target.classList.contains('q')) { S.cmt.search.q = e.target.value; S.cmt.search.typed = e.target.value.trim() !== '' && e.target.value !== S.cmt.search.autoQ; } });
   root.addEventListener('change', (e) => {
     const a = e.target.dataset && e.target.dataset.act;
     if (a === 'paceTarget' && PACE_TARGETS.includes(Number(e.target.value))) { pace.target = Number(e.target.value); savePace(); render(); }
@@ -1218,6 +1253,7 @@ details.byp[open]>summary .car{transform:rotate(180deg)}
 .m-fun{background:#fff4d6;color:#a16207}.m-interesting{background:#eef2ff;color:#4338ca}.m-warm{background:#fdecef;color:#be185d}.m-celebrate{background:#fde8f3;color:#c026d3}
 .m-serious{background:#eef1f4;color:#334155}.m-dark{background:#ece9f6;color:#5b4b8a}.m-info{background:#e9f8ef;color:#027a38}.bsc{color:#6b7280;background:#f0f2f5}.bsc.hi{color:#027a38;background:#e9f8ef}
 .recbar{display:flex;justify-content:space-between;align-items:flex-start;gap:6px;font-size:11.5px;color:#5b6470;margin:0 0 6px}.recbar b{color:#027a38}.recbar i{font-style:normal;color:#8a94a3}.recbar .lnk{flex:none}
+.kwsug{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:-2px 0 8px;font-size:11.5px;color:#6b7280}.kwsug button{border:1px solid #cfe9da;background:#f2fbf6;color:#027a38;border-radius:99px;padding:2px 9px;font:inherit;font-size:11.5px;font-weight:700;cursor:pointer}.kwsug button.on{background:#03a94d;color:#fff;border-color:#03a94d}
 .qseg{margin:0 0 7px}.prow{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 7px;font-size:12px;color:#3d4550}.prow label{display:flex;align-items:center;gap:4px}.prow select{font:inherit;font-size:12px;border:1px solid #cfd4da;border-radius:7px;padding:3px 4px;background:#fff}
 .ptip{margin-top:7px;background:#f7f9fa;border-radius:9px;padding:7px 9px;font-size:11.5px;line-height:1.55;color:#3d4550}.ptip b{color:#027a38;margin-right:3px}
 .qchk{display:flex!important;gap:5px;align-items:flex-start;cursor:pointer}.qchk input{margin:1px 0 0}.skipnote{display:block;margin:2px 0 8px;font-size:11.5px}

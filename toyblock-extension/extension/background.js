@@ -900,7 +900,12 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
     case 'nbx-cmt-rewrite-open': {
       if (!ID_RE.test(msg.blogId || '') || !NO_RE.test(String(msg.logNo || ''))) return false;
       const q = new URLSearchParams({ b: msg.blogId, n: String(msg.logNo), s: msg.status === 'warn' ? 'warn' : 'miss', r: String(Number(msg.rank) || ''), t: cleanStr(msg.tag, 20) });
-      return run(chrome.tabs.create({ url: chrome.runtime.getURL('rewrite.html?' + q) }).then(() => ({ ok: true })));
+      // 설치 폴더에 화면 파일이 빠져 있으면(업데이트가 일부만 적용된 경우) 빠진 파일을 다시 채우는 화면을 엽니다
+      return run(fetch(chrome.runtime.getURL('rewrite.html'), { cache: 'no-store' }).then((r) => r.ok, () => false).then(async (has) => {
+        if (has) { await chrome.tabs.create({ url: chrome.runtime.getURL('rewrite.html?' + q) }); return { ok: true }; }
+        if (hasFolderUpdater()) await chrome.tabs.create({ url: chrome.runtime.getURL('update.html?repair=1') });
+        return { ok: false, error: 'missing', repair: hasFolderUpdater() };
+      }));
     }
     case 'nbx-cmt-rewrite': return run(rewritePost(msg));
     case 'nbx-ai-test': return run(aiTest(msg.provider));

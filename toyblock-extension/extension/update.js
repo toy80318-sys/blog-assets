@@ -11,6 +11,7 @@ const step = (name, state, detail) => {
 };
 const msg = (t, cls) => { $('#msg').textContent = t; $('#msg').className = 'msg ' + (cls || ''); };
 let store = false, latestInfo = null, busy = false;
+const REPAIR = /[?&]repair=1/.test(location.search); // 설치 폴더에 빠진 파일이 있어 같은 버전이라도 파일을 다시 채움
 const AUTO = /[?&]auto=1/.test(location.search); // 새 버전이 나와 확장이 스스로 연 화면(사용자가 누르지 않음)
 const closeSelf = () => { try { chrome.tabs.getCurrent((t) => { if (t) chrome.tabs.remove(t.id); }); } catch (_) {} };
 
@@ -34,7 +35,8 @@ async function go(interactive, auto = false) {
       else msg(`v${cur} — 최신 버전이에요`, 'ok');
       return;
     }
-    const r = await NBXSelf.run({ interactive, step, auto });
+    const r = await NBXSelf.run({ interactive, step, auto, force: REPAIR });
+    if (r.status === 'applied' && REPAIR && !r.changed) { msg('설치 폴더의 파일이 모두 있어요. 크롬의 확장 프로그램 화면에서 토이블록 ↻(새로고침)을 한 번 눌러 주세요.', 'ok'); return; }
     if (r.status === 'latest') msg(`v${cur} — 최신 버전이에요`, 'ok');
     else if (r.status === 'need-pick' || r.status === 'need-click') { msg('아래 버튼을 한 번 눌러 주세요.', ''); $('#first').style.display = r.status === 'need-pick' ? 'block' : 'none'; }
     else if (r.status === 'cancel') msg('폴더 고르기를 취소했어요.', '');
@@ -77,6 +79,7 @@ async function init() {
     if (newer && latestInfo.notes) { $('#notes').textContent = latestInfo.notes; $('#notes').style.display = 'block'; }
     if (latestInfo.downloadUrl) $('#zip').href = latestInfo.downloadUrl; else $('#zip').style.display = 'none';
     $('#go').textContent = newer ? `v${latestInfo.version}으로 지금 업데이트` : '업데이트 확인';
+    if (REPAIR && !store) { $('#title').textContent = '빠진 파일 채우기'; $('#go').textContent = newer ? `v${latestInfo.version}으로 업데이트하며 빠진 파일 채우기` : '빠진 파일 다시 채우기'; msg('설치 폴더에 일부 파일이 빠져 있어요. 아래 버튼을 누르면 최신 파일로 다시 채운 뒤 토이블록을 새로 불러와요.', ''); }
   } catch (e) { $('#ver').textContent = `지금 v${cur} · ${e.message}`; $('#zip').style.display = 'none'; }
   $('#go').disabled = false;
   if (!store) {
@@ -88,6 +91,7 @@ async function init() {
     if (AUTO) { if (ready) go(false, true); else closeSelf(); return; }
     // 팝업의 '지금 업데이트'로 열렸고, 폴더 허용이 살아 있으면 누르지 않아도 바로 진행합니다
     if (/[?&]go=1/.test(location.search) && ready) go(false);
+    if (REPAIR && l.linked && l.granted) go(false);
   } else if (/[?&]go=1/.test(location.search)) go(false);
 }
 $('#go').addEventListener('click', () => go(true));
